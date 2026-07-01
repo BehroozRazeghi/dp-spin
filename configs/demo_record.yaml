@@ -1,0 +1,40 @@
+# Synthetic record-level configuration used by scripts/run_demo.sh.
+
+# Inputs and output directory.
+experiment_name: demo_record
+records: data/processed/demo_records.jsonl
+atoms: data/public_atoms/demo_atoms.json
+output_dir: outputs/demo/record/runs
+
+# One synthetic record is one protected contribution under add/drop adjacency.
+protected_unit: record
+adjacency: adddrop
+n_records: 800
+record_selection: hash
+
+# Public denominator used to convert released noisy masses to prevalence values.
+public_denominator: 800
+auto_public_denominator_from_n_records: true
+
+# Bounded sparse semantic contribution map and released plan size.
+m: 15
+K: 3
+gamma: 10.0  # Softmax concentration; larger values favor higher-similarity atoms.
+L: 5
+
+# Differentially private semantic-plan release.
+epsilon: 1.0
+delta: 1.0e-6
+mechanism: gaussian
+gaussian_calibration: analytic
+seed: 0
+
+# The template decoder verbalizes only the released semantic plan.
+decoder_backend: template
+
+# Prevalence-bin thresholds, expressed as fractions of public_denominator.
+prevalence_bins:
+  very common: 0.20
+  common: 0.10
+  moderate: 0.05
+  low: 0.0

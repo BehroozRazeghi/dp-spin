@@ -1,0 +1,40 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Test and coverage artifacts
+.coverage
+.coverage.*
+htmlcov/
+
+# Build and packaging artifacts
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+dpspin_env/
+
+# Local environment files and secrets
+.env*
+!.env.example
+
+# Local datasets, generated atom dictionaries, and experiment outputs
+/data/**
+!/data/.gitkeep
+/outputs/**
+!/outputs/.gitkeep
+
+# Logs
+*.log
+
+# Operating-system and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

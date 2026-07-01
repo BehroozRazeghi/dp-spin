@@ -1,0 +1,47 @@
+# Manual CFPB record-level configuration for the separately built 200-atom dictionary.
+# The maintained paper grids use generated files under configs/auto/ instead.
+
+# Protected target data, public atom dictionary, auxiliary TF-IDF fit data, and output.
+experiment_name: cfpb_m200
+records: data/protected_target/cfpb_target_records.jsonl
+atoms: data/public_atoms/cfpb_atoms_m200.json
+embedding_fit_records: data/auxiliary/cfpb_atom_auxiliary_records.jsonl
+output_dir: outputs/cfpb/record/runs
+
+# One complaint narrative is one protected contribution under add/drop adjacency.
+protected_unit: record
+adjacency: adddrop
+n_records: 2000
+record_selection: hash
+
+# Public denominator used to compute released prevalence values and bins.
+public_denominator: 2000
+auto_public_denominator_from_n_records: true
+
+# Bounded sparse semantic contribution map and released plan size.
+m: 200
+K: 3
+gamma: 10.0  # Softmax concentration; larger values favor higher-similarity atoms.
+L: 10
+
+# Differentially private semantic-plan release.
+epsilon: 1.0
+delta: 1.0e-6
+mechanism: gaussian
+gaussian_calibration: analytic
+seed: 0
+
+# The template decoder verbalizes only the released semantic plan.
+decoder_backend: template
+
+# Descriptive provenance metadata saved with the run; this field is not an enforcement check.
+atom_source_protocol: >-
+  atoms and TF-IDF fit built from disjoint auxiliary split;
+  protected records are target split
+
+# Prevalence-bin thresholds, expressed as fractions of public_denominator.
+prevalence_bins:
+  very common: 0.20
+  common: 0.10
+  moderate: 0.05
+  low: 0.0

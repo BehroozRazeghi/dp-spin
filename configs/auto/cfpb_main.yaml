@@ -1,0 +1,31 @@
+experiment_name: cfpb_main
+records: data/protected_target/cfpb_target_records.jsonl
+atoms: data/public_atoms/cfpb_atoms_m200.json
+embedding_fit_records: data/auxiliary/cfpb_atom_auxiliary_records.jsonl
+output_dir: outputs/cfpb/main/runs
+protected_unit: record
+adjacency: adddrop
+n_records: 5000
+m: 200
+K: 3
+gamma: 10.0
+L: 10
+epsilon: 1.0
+delta: 1.0e-06
+mechanism: gaussian
+public_denominator: 5000
+gaussian_calibration: analytic
+atom_source_protocol: atoms built from disjoint auxiliary split; protected records
+  are target split
+atom_dictionary_protocol: for grids with varying m in {50,100,200}, run_grid receives
+  --atoms-template so each m uses its separately built Product/Issue/Sub-issue atom
+  file
+config_role: auto-generated base config; run_grid overwrites grid parameters from
+  command-line arrays
+seed: 0
+decoder_backend: template
+prevalence_bins:
+  very common: 0.2
+  common: 0.1
+  moderate: 0.05
+  low: 0.0

@@ -1,0 +1,27 @@
+experiment_name: cfpb_probe
+records: outputs/cfpb/probe/data/cfpb_probe_base_2000.jsonl
+atoms: data/public_atoms/cfpb_atoms_probe.json
+embedding_fit_records: data/auxiliary/cfpb_atom_auxiliary_records.jsonl
+output_dir: outputs/cfpb/probe/runs
+protected_unit: record
+adjacency: adddrop
+n_records: 2000
+m: 201
+K: 3
+gamma: 10.0
+L: 10
+epsilon: 1.0
+delta: 1.0e-06
+mechanism: gaussian
+public_denominator: 2000
+probe_public_denominator_mode: actual_generated
+probe_base_size: 2000
+probe_atom_ids:
+- 200
+seed: 0
+decoder_backend: template
+prevalence_bins:
+  very common: 0.2
+  common: 0.1
+  moderate: 0.05
+  low: 0.0

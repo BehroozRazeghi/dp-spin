@@ -1,0 +1,50 @@
+# Base configuration for Amazon All Beauty record-level grids.
+# scripts/run_amazon.sh supplies the grid values and may override paths and output directories.
+
+# Protected target data, public atom dictionary, auxiliary TF-IDF fit data, and output.
+experiment_name: amazon_record
+records: data/protected_target/amazon_target_records.jsonl
+atoms: data/public_atoms/amazon_All_Beauty_atoms_m46.json
+embedding_fit_records: data/auxiliary/amazon_atom_auxiliary_records.jsonl
+output_dir: outputs/amazon/record/runs
+
+# One review is one protected contribution under add/drop adjacency.
+protected_unit: record
+adjacency: adddrop
+n_records: 5000
+record_selection: hash
+
+# Public denominator used to compute released prevalence values and bins.
+public_denominator: 5000
+auto_public_denominator_from_n_records: true
+
+# The reported auxiliary-derived All Beauty dictionary contains 46 public atoms.
+m: 46
+K: 3
+gamma: 10.0  # Softmax concentration; larger values favor higher-similarity atoms.
+L: 10
+
+# Differentially private semantic-plan release.
+epsilon: 1.0
+delta: 1.0e-6
+mechanism: gaussian
+gaussian_calibration: analytic
+seed: 0
+
+# Released-plan verbalization and offline non-private reference evaluation.
+decoder_backend: template
+clean_reference_decoder_backend: template
+summary_embedding_backend: tfidf
+summary_comparative_eval_backend: none
+
+# Descriptive provenance metadata saved with the run; this field is not an enforcement check.
+atom_source_protocol: >-
+  atoms and TF-IDF fit built from user-disjoint public/auxiliary split;
+  protected records are target split
+
+# Prevalence-bin thresholds, expressed as fractions of public_denominator.
+prevalence_bins:
+  very common: 0.20
+  common: 0.10
+  moderate: 0.05
+  low: 0.0

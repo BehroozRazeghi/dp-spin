@@ -1,0 +1,50 @@
+# Manual controlled probe-atom configuration for CFPB.
+# The public dictionary contains 200 ordinary atoms and one known probe atom.
+# The experiment measures private admission of that coordinate, not raw-text extraction.
+
+# Protected target data, public probe dictionary, auxiliary TF-IDF fit data, and output.
+experiment_name: cfpb_probe
+records: outputs/cfpb/probe/data/cfpb_probe_base_2000.jsonl
+atoms: data/public_atoms/cfpb_atoms_probe_m200.json
+embedding_fit_records: data/auxiliary/cfpb_atom_auxiliary_records.jsonl
+output_dir: outputs/cfpb/probe/runs
+
+# Probe runs remain record-level under add/drop adjacency.
+protected_unit: record
+adjacency: adddrop
+n_records: 2000
+record_selection: hash
+
+# The automated sweep sets the denominator to base size plus inserted probe support.
+public_denominator: 2000
+probe_public_denominator_mode: actual_generated
+probe_base_size: 2000
+probe_atom_ids: [200]
+
+# Load all 200 ordinary atoms and the added public probe atom.
+m: 201
+K: 3
+gamma: 10.0  # Softmax concentration; larger values favor higher-similarity atoms.
+L: 10
+
+# Differentially private semantic-plan release.
+epsilon: 1.0
+delta: 1.0e-6
+mechanism: gaussian
+gaussian_calibration: analytic
+seed: 0
+
+# The template decoder verbalizes only the released semantic plan.
+decoder_backend: template
+
+# Descriptive provenance metadata saved with the run; this field is not an enforcement check.
+atom_source_protocol: >-
+  probe atom dictionary is public;
+  protected records are target/probe target split
+
+# Prevalence-bin thresholds, expressed as fractions of public_denominator.
+prevalence_bins:
+  very common: 0.20
+  common: 0.10
+  moderate: 0.05
+  low: 0.0
