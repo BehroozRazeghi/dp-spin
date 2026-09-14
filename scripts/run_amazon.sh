@@ -43,7 +43,7 @@ REUSE_PREP="${REUSE_PREP:-1}"
 FORCE_PREP="${FORCE_PREP:-0}"
 RUN_RECORD="${RUN_RECORD:-1}"
 RUN_USER="${RUN_USER:-1}"
-CLEAN_RUNS="${CLEAN_RUNS:-1}"  # Clear selected run directories before the grid.
+CLEAN_RUNS="${CLEAN_RUNS:-0}"  # Set to 1 to clear selected run directories before the grid.
 SKIP_EXISTING="${SKIP_EXISTING:-0}"  # Preserve and skip completed operating points.
 RUN_PROBE="${RUN_PROBE:-1}"          # Run the controlled-probe experiment after the main grid.
 
@@ -195,7 +195,7 @@ DECODER_TEMPERATURE="${DECODER_TEMPERATURE:-0.0}"
 CLEAN_REFERENCE_DECODER_BACKEND="${CLEAN_REFERENCE_DECODER_BACKEND:-template}"
 CLEAN_REFERENCE_DECODER_MODEL="${CLEAN_REFERENCE_DECODER_MODEL:-$DECODER_MODEL}"
 SUMMARY_COMPARATIVE_EVAL_BACKEND="${SUMMARY_COMPARATIVE_EVAL_BACKEND:-none}"
-SUMMARY_EMBEDDING_BACKEND="${SUMMARY_EMBEDDING_BACKEND:-tfidf}"
+SUMMARY_EMBEDDING_BACKEND="${SUMMARY_EMBEDDING_BACKEND:-none}"
 GRID_DECODER_ARGS=(
   --decoder-backend "$DECODER_BACKEND"
   --decoder-model "$DECODER_MODEL"
@@ -211,6 +211,7 @@ RUN_GRID_EXTRA_ARGS=()
 if [[ "$SKIP_EXISTING" == "1" ]]; then RUN_GRID_EXTRA_ARGS+=(--skip-existing); fi
 
 if [[ "$CLEAN_RUNS" == "1" ]]; then
+  echo "CLEAN_RUNS=1: removing selected run directories under $OUT before execution."
   if [[ "$RUN_RECORD" == "1" ]]; then rm -rf "$OUT/record/runs"; mkdir -p "$OUT/record/runs"; fi
   if [[ "$RUN_USER" == "1" ]]; then rm -rf "$OUT/user/runs"; mkdir -p "$OUT/user/runs"; fi
 fi

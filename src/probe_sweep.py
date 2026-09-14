@@ -27,7 +27,7 @@ def _count_jsonl(path: str | Path) -> int:
 def _resolve_probe_denominator(base: dict[str, Any], actual_n: int, base_n: int, support: int) -> int:
     """Resolve the public denominator used by a generated probe run.
 
-    The default policy is ``actual_generated``: prevalence bins are defined
+    The default policy is ``actual_generated``: support bins are defined
     relative to the generated corpus size ``base_n + support``. This is the
     least ambiguous policy for probe diagnostics. A fixed base denominator is
     still available for backward-compatible diagnostic runs by setting

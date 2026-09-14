@@ -111,6 +111,14 @@ def _load_row(metrics_path: Path) -> dict[str, Any]:
     lexical = text_eval.get("lexical", {}) or {}
     embedding = text_eval.get("embedding", {}) or {}
     comparative = text_eval.get("comparative", {}) or {}
+    verifier = data.get("verifier", {}) or {}
+    reverified_path = run_dir / "verifier_reverified.json"
+    if reverified_path.exists():
+        try:
+            verifier = json.load(open(reverified_path, encoding="utf-8")) or verifier
+        except Exception:
+            pass
+    regeneration = verifier.get("regeneration", {}) or {}
     return {
         "run": run,
         "path": str(run_dir),
@@ -131,6 +139,10 @@ def _load_row(metrics_path: Path) -> dict[str, Any]:
         "gaussian_calibration": cfg.get("gaussian_calibration"),
         "value_epsilon_fraction": cfg.get("value_epsilon_fraction"),
         "value_mechanism": cfg.get("value_mechanism"),
+        "decoder_backend": cfg.get("decoder_backend"),
+        "decoder_contract_mode": cfg.get("decoder_contract_mode"),
+        "clean_reference_decoder_backend": cfg.get("clean_reference_decoder_backend"),
+        "summary_embedding_backend_configured": cfg.get("summary_embedding_backend"),
         "mechanism": cfg.get("mechanism", parsed.get("mechanism")),
         "seed": cfg.get("seed", parsed.get("seed")),
         "overlap_at_L": sketch.get("overlap_at_L"),
@@ -139,9 +151,20 @@ def _load_row(metrics_path: Path) -> dict[str, Any]:
         "num_total_coordinates": sketch.get("num_total_coordinates"),
         "num_released_coordinates": sketch.get("num_released_coordinates"),
         "is_sparse_release": sketch.get("is_sparse_release"),
-        "UAR": data.get("verifier", {}).get("UAR"),
-        "UCR": data.get("verifier", {}).get("UCR"),
-        "verifier_accept": data.get("verifier", {}).get("accept"),
+        "UAR": verifier.get("UAR"),
+        "UCR": verifier.get("UCR"),
+        "verifier_accept": verifier.get("accept"),
+        "comparison_count": verifier.get("comparison_count"),
+        "supported_comparison_count": verifier.get("supported_comparison_count"),
+        "unsupported_comparison_count": verifier.get("unsupported_comparison_count"),
+        "attempts_used": regeneration.get("attempts_used"),
+        "accepted_before_fallback": regeneration.get("accepted_before_fallback"),
+        "fallback_used": regeneration.get("fallback_used"),
+        "first_attempt_accept": (
+            None
+            if not isinstance(regeneration.get("accepted_before_fallback"), bool)
+            else bool(regeneration.get("accepted_before_fallback")) and int(regeneration.get("attempts_used", 0) or 0) == 1
+        ),
         # User-level clipping diagnostics, present only for user-level runs.
         "n_users_clipped": clipping.get("n_users_clipped"),
         "fraction_users_clipped": clipping.get("fraction_users_clipped"),
@@ -180,10 +203,14 @@ def _write_rows(rows: list[dict[str, Any]], path: Path) -> None:
     cols = [
         "run", "protected_unit", "n_records", "n_users", "n_protected_units", "user_contribution_bound",
         "mechanism", "m", "K", "L", "probe_support", "epsilon", "epsilon_configured", "delta", "delta_configured", "delta_effective", "adjacency",
-        "gaussian_calibration", "value_epsilon_fraction", "value_mechanism", "seed",
+        "gaussian_calibration", "value_epsilon_fraction", "value_mechanism",
+        "decoder_backend", "decoder_contract_mode", "clean_reference_decoder_backend",
+        "summary_embedding_backend_configured", "seed",
         "overlap_at_L", "mass_retained_fraction", "support_mass_loss",
         "num_total_coordinates", "num_released_coordinates", "is_sparse_release",
-        "UAR", "UCR", "verifier_accept",
+        "UAR", "UCR", "verifier_accept", "comparison_count",
+        "supported_comparison_count", "unsupported_comparison_count",
+        "attempts_used", "first_attempt_accept", "accepted_before_fallback", "fallback_used",
         "n_users_clipped", "fraction_users_clipped", "max_unclipped_user_mass",
         "max_clipped_user_mass", "mean_records_per_user", "users_with_multiple_records",
         "text_token_jaccard", "text_bigram_jaccard", "text_trigram_jaccard",
@@ -235,6 +262,10 @@ def _summary_group_key(row: dict[str, Any]) -> tuple[tuple[str, Any], ...]:
         ("gaussian_calibration", row.get("gaussian_calibration")),
         ("value_epsilon_fraction", row.get("value_epsilon_fraction")),
         ("value_mechanism", row.get("value_mechanism")),
+        ("decoder_backend", row.get("decoder_backend")),
+        ("decoder_contract_mode", row.get("decoder_contract_mode")),
+        ("clean_reference_decoder_backend", row.get("clean_reference_decoder_backend")),
+        ("summary_embedding_backend_configured", row.get("summary_embedding_backend_configured")),
     ])
     return tuple(base)
 
@@ -270,7 +301,9 @@ def _write_summary(rows: list[dict[str, Any]], path: Path) -> list[dict[str, Any
             _numeric_summary(item, rs, sample_field)
         for metric in [
             "overlap_at_L", "mass_retained_fraction", "support_mass_loss",
-            "UAR", "UCR", "n_users_clipped", "fraction_users_clipped",
+            "UAR", "UCR", "comparison_count", "supported_comparison_count",
+            "unsupported_comparison_count", "attempts_used",
+            "n_users_clipped", "fraction_users_clipped",
             "max_unclipped_user_mass", "max_clipped_user_mass",
             "mean_records_per_user", "users_with_multiple_records",
             "text_token_jaccard", "text_bigram_jaccard", "text_trigram_jaccard",
@@ -282,11 +315,17 @@ def _write_summary(rows: list[dict[str, Any]], path: Path) -> list[dict[str, Any
         acc = [bool(r.get("verifier_accept")) for r in rs if r.get("verifier_accept") is not None]
         if acc:
             item["verifier_accept_rate"] = sum(acc) / len(acc)
+        for field in ["first_attempt_accept", "accepted_before_fallback", "fallback_used"]:
+            vals = [bool(r.get(field)) for r in rs if r.get(field) is not None]
+            if vals:
+                item[f"{field}_rate"] = sum(vals) / len(vals)
         out.append(item)
     preferred = [
         "protected_unit", "n_records", "n_users", "user_contribution_bound",
         "mechanism", "m", "K", "L", "probe_support", "epsilon", "epsilon_configured", "delta", "delta_configured", "delta_effective", "adjacency",
         "gaussian_calibration", "value_epsilon_fraction", "value_mechanism",
+        "decoder_backend", "decoder_contract_mode", "clean_reference_decoder_backend",
+        "summary_embedding_backend_configured",
         "num_runs", "num_seeds", "seeds",
         "n_records_mean", "n_records_min", "n_records_max", "n_records_std",
         "n_users_mean", "n_users_min", "n_users_max", "n_users_std",
@@ -294,6 +333,8 @@ def _write_summary(rows: list[dict[str, Any]], path: Path) -> list[dict[str, Any
         "mass_retained_fraction_mean", "mass_retained_fraction_std", "mass_retained_fraction_min", "mass_retained_fraction_max",
         "support_mass_loss_mean", "support_mass_loss_std", "support_mass_loss_min", "support_mass_loss_max",
         "verifier_accept_rate", "UAR_mean", "UCR_mean",
+        "comparison_count_mean", "supported_comparison_count_mean", "unsupported_comparison_count_mean",
+        "attempts_used_mean", "first_attempt_accept_rate", "accepted_before_fallback_rate", "fallback_used_rate",
         "text_keyphrase_jaccard_mean", "text_token_jaccard_mean", "text_bigram_jaccard_mean",
         "text_tfidf_cosine_mean", "summary_embedding_cosine_mean", "comparative_dp_preferred_mean",
         "probe_plan_plan_admission_rate_mean", "probe_summary_mention_rate_mean",

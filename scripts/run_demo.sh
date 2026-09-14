@@ -8,7 +8,10 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-rm -rf outputs/demo outputs/baselines/demo
+CLEAN_DEMO="${CLEAN_DEMO:-0}"
+if [[ "$CLEAN_DEMO" == "1" ]]; then
+  rm -rf outputs/demo outputs/baselines/demo
+fi
 
 python -m src.generate_demo_data \
   --records data/processed/demo_records.jsonl \

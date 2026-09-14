@@ -24,11 +24,52 @@ dpspin_env/
 .env*
 !.env.example
 
-# Local datasets, generated atom dictionaries, and experiment outputs
-/data/**
+# Local datasets. Preserve only the documented directory skeleton.
+/data/*
 !/data/.gitkeep
-/outputs/**
+!/data/annotations/
+!/data/auxiliary/
+!/data/frozen_atoms/
+!/data/processed/
+!/data/protected_target/
+!/data/public_atoms/
+!/data/raw/
+/data/annotations/*
+/data/auxiliary/*
+/data/frozen_atoms/*
+/data/processed/*
+/data/protected_target/*
+/data/public_atoms/*
+/data/raw/*
+!/data/annotations/.gitkeep
+!/data/auxiliary/.gitkeep
+!/data/frozen_atoms/.gitkeep
+!/data/processed/.gitkeep
+!/data/protected_target/.gitkeep
+!/data/public_atoms/.gitkeep
+!/data/raw/.gitkeep
+
+# Generated outputs. Preserve only the established top-level output skeleton.
+/outputs/*
 !/outputs/.gitkeep
+!/outputs/amazon_All_Beauty/
+!/outputs/cfpb/
+!/outputs/main_paper_figures/
+!/outputs/openai_paper/
+!/outputs/openai_paper_report_archive/
+!/outputs/yelp_restaurants/
+/outputs/amazon_All_Beauty/*
+/outputs/cfpb/*
+/outputs/main_paper_figures/*
+/outputs/openai_paper/*
+/outputs/openai_paper_report_archive/*
+/outputs/yelp_restaurants/*
+!/outputs/amazon_All_Beauty/.gitkeep
+!/outputs/cfpb/.gitkeep
+!/outputs/main_paper_figures/.gitkeep
+!/outputs/openai_paper/.gitkeep
+!/outputs/openai_paper_report_archive/.gitkeep
+!/outputs/yelp_restaurants/.gitkeep
 
 # Logs
 *.log

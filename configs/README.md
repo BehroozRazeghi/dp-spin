@@ -24,6 +24,12 @@ and protocol choices must satisfy the privacy boundary described below.
 | `amazon_user_template.yaml` | Base configuration for Amazon user-level grids. |
 | `yelp_record_template.yaml` | Base configuration for Yelp record-level grids. |
 | `yelp_user_template.yaml` | Base configuration for Yelp user-level grids. |
+| `validation_demo.yaml` | Synthetic end-to-end validation configuration. |
+| `synthetic_benchmark.yaml` | Controlled ground-truth benchmark grid. |
+| `external_validity_template.yaml` | Assignment-family, transfer, and dictionary-stress protocol. |
+| `external_validity_demo.yaml` | Fully local external-validity software example. |
+| `decoder_external_validity_template.yaml` | Multi-decoder and distinct-judge protocol. |
+| `scaling_benchmark.yaml` | Release-time runtime, memory, and payload benchmark. |
 | `auto/*.yaml` | Generated CFPB base configurations; `run_cfpb.sh` may replace them. |
 
 The main CFPB workflow uses generated files under `configs/auto/`; it does not
@@ -55,7 +61,7 @@ representation used by the semantic contribution map must be fixed independently
 of this split. In the reported user-level experiments, the auxiliary and
 protected target splits are user-disjoint.
 
-If `embedding_fit_records` is omitted, the implementation fits TF-IDF on the
+If `embedding_fit_records` is omitted, the implementation fits the selected fixed representation on the
 public atom text only. The demo-only option that fits on protected target text is
 outside the privacy guarantee used for the paper experiments.
 
@@ -70,7 +76,7 @@ record_selection: hash, random, or first
 user_selection: hash, random, or first
 user_id_field: field used to group records by user
 user_contribution_bound: l1 clipping bound B for one user's aggregate contribution
-public_denominator: public denominator used to compute released prevalence values
+public_denominator: public denominator used to compute released normalized semantic-support values
 ```
 
 For `protected_unit: record`, one record is one protected contribution. For
@@ -86,7 +92,7 @@ The reported experiments use add/drop adjacency. Replacement adjacency is
 implemented for controlled comparisons.
 
 `public_denominator` is used only to convert nonnegative released noisy masses
-into prevalence values and bins. Under add/drop adjacency, do not replace it
+into normalized semantic-support values and bins. Under add/drop adjacency, do not replace it
 with a realized private corpus size unless that size is public or is released
 through a separately accounted differentially private mechanism.
 
@@ -104,11 +110,25 @@ L: number of atoms admitted to the released semantic plan
 gamma: softmax concentration parameter for retained atom-similarity scores
 ```
 
-The model permits at most `K` nonzero coordinates per record. The current
-implementation selects exactly `K` atoms when `1 <= K <= m`, assigns
-nonnegative weights, and normalizes each record-level vector to l1 mass one.
-Larger `gamma` values concentrate more mass on the highest-similarity atoms;
-`gamma` is therefore a concentration parameter, not a temperature parameter.
+The model permits at most `K` nonzero coordinates and total l1 mass at most one.
+The assignment layer supports `assignment_embedding_family: tfidf_word | tfidf_char | sentence_transformer`,
+`assignment_embedding_min_df`, `assignment_embedding_max_features`,
+`assignment_embedding_word_ngram_range`, `assignment_embedding_char_ngram_range`,
+and the following fixed-pretrained-encoder controls:
+`assignment_embedding_model_name`, `assignment_embedding_model_revision`,
+`assignment_embedding_model_batch_size`, `assignment_embedding_model_device`,
+`assignment_embedding_model_local_files_only`, and
+`assignment_embedding_model_trust_remote_code`. Reproducible runs should pin a
+specific model revision or commit and archive the resolved metadata. The
+sentence encoder performs no fitting on project records; TF-IDF families may be
+fitted only on public atom text and optional public or disjoint auxiliary text.
+
+The assignment layer also supports `assignment_similarity_threshold`,
+`assignment_abstention_mode: zero | other_atom | disabled`, and
+`assignment_mass_mode: unit | confidence`. The threshold and any public
+`other/uncovered` atom must be fixed from public or disjoint auxiliary data.
+Covered records retain at most `K` atoms; uncovered records may contribute zero
+mass. Larger `gamma` values concentrate mass on the retained atoms.
 
 The runner loads the atom file before assigning protected target records. If
 `m` is smaller than the file length, it uses the first `m` entries. If the file
@@ -126,7 +146,11 @@ mechanism: gaussian, laplace, or private_topL
 gaussian_calibration: analytic or classical
 value_epsilon_fraction: fraction of epsilon used for selected-value release
 value_mechanism: gaussian or laplace
-seed: run seed
+seed: legacy base seed
+data_seed: protected-unit selection seed
+mechanism_seed: DP mechanism seed
+decoder_seed: decoder seed (recorded; backend support may vary)
+judge_seed: automated-judge seed (recorded; backend support may vary)
 ```
 
 The mechanisms are:
@@ -140,8 +164,11 @@ The mechanisms are:
 
 For `private_topL`, the default value-release fraction is `0.5`. If
 `value_epsilon_fraction = rho`, then `rho * epsilon` is used for selected-value
-release and `(1 - rho) * epsilon` is divided uniformly across the sequential
-atom-admission rounds. The default selected-value mechanism is Gaussian.
+release. `selection_budget_allocation` selects `uniform`, `front_loaded`, or
+`theory_optimal` allocation of the remaining budget across sequential rounds;
+the last option minimizes the manuscript's cumulative regret surrogate. Each
+run records the epsilon schedule, per-round alpha bounds, cumulative certificate,
+and sufficient exact-recovery gap. The default selected-value mechanism is Gaussian.
 
 A Laplace full-sketch release has effective `delta = 0`. A `private_topL` run
 also has effective `delta = 0` when its selected values are released with
@@ -154,17 +181,20 @@ calibration is the default for general positive `epsilon`.
 ## Decoder, verifier, and offline evaluation
 
 ```yaml
-decoder_backend: template or openai
+decoder_backend: template, openai, or hf_local
+decoder_contract_mode: legacy_text (paper protocol) or structured
 verifier_max_attempts: maximum number of decoder attempts before fallback
-summary_embedding_backend: tfidf, auto, or sentence_transformer
-summary_comparative_eval_backend: none, heuristic, or openai
-clean_reference_decoder_backend: template or openai
+verifier_comparison_margin: public minimum released-mass comparison margin
+summary_embedding_backend: none, tfidf, auto, or sentence_transformer
+summary_comparative_eval_backend: none, heuristic, openai, or hf_local
+clean_reference_decoder_backend: template, openai, or hf_local
 ```
 
 The DP-SPIN decoder receives only the released semantic plan and public
-instructions. It does not receive raw protected records, raw excerpts,
-per-record semantic vectors, the non-private sketch, non-private
-representatives, or labels outside the admitted atom set.
+instructions. The reported paper experiments use `legacy_text`, which verifies marker-preserving audit text against the released plan. `structured` remains an optional typed-claim mode in which the decoder proposes claims over released atom identifiers and the accepted claim list is rendered deterministically.
+It does not receive raw protected records, raw excerpts, per-record semantic
+vectors, the non-private sketch, non-private representatives, or labels outside
+the admitted atom set.
 
 The clean reference plan, clean reference summary, and text-level comparison
 metrics are non-private evaluation artifacts. They are not part of the released
@@ -174,12 +204,12 @@ DP-SPIN interface.
 descriptive metadata saved with a run. They document the intended protocol but
 do not enforce it.
 
-## Prevalence bins
+## Support bins
 
 ```yaml
-prevalence_bins:
-  very common: 0.20
-  common: 0.10
+support_bins:
+  very high: 0.20
+  high: 0.10
   moderate: 0.05
   low: 0.0
 ```
@@ -259,3 +289,13 @@ python -m src.run_experiment \
 
 Run the maintained dataset workflows through their shell scripts rather than by
 editing generated files under `configs/auto/`.
+
+
+## External-validity configurations
+
+- `external_validity_template.yaml` defines a paired fixed-representation experiment with word TF-IDF, character TF-IDF, and a pinned pretrained sentence encoder; domain/time transfer against a matched target dictionary on the same target records; and dictionary-misspecification/abstention risk-coverage studies.
+- `external_validity_demo.yaml` is a fully local software-validation example using bundled synthetic records and annotations. It intentionally omits the optional pretrained model and therefore is not a paper result.
+- `decoder_external_validity_template.yaml` defines at least two decoder conditions and a distinct automated judge. For the open-weight decoder, pin `revision`, record `device_map`, and set `local_files_only: true` after the model snapshot has been archived. The `hf_local` backend requires the optional `local-llm` dependencies.
+- `scaling_benchmark.yaml` controls dictionary sizes, released-plan sizes, mechanisms, warm-up runs, repetitions, and privacy parameters for release-time runtime, peak Python-tracked memory, and numeric payload measurements.
+
+The transfer configuration requires explicit source/target domain and period metadata. If `matched_target_atoms` is supplied, both source and matched dictionaries are evaluated on the identical target records and their own compatible annotations. The misspecification configuration distinguishes deployable random/shuffle stress tests from the evaluation-only `drop_frequent_gold` adversary. A threshold is called selected only when it is chosen on a disjoint annotated calibration set; otherwise the target threshold grid is descriptive.

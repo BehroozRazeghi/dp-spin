@@ -821,6 +821,34 @@ def _dedupe_dpspin_rows(
     return out
 
 
+def _refresh_reverified_openai_fields(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Refresh verifier fields from post-hoc sidecars when available.
+
+    Report-only reconstruction normally starts from the saved CSV.  The
+    corrected verifier writes ``verifier_openai_reverified.json`` beside each
+    saved audit summary; prefer that sidecar so report regeneration does not
+    require another OpenAI call or another DP release.
+    """
+    for row in rows:
+        run_path = Path(str(row.get("openai_run") or ""))
+        if not run_path:
+            continue
+        verifier_path = run_path / "verifier_openai_reverified.json"
+        if not verifier_path.exists():
+            continue
+        try:
+            verifier = read_json(verifier_path)
+        except Exception:
+            continue
+        row["verifier_accept"] = verifier.get("accept")
+        row["UAR"] = verifier.get("UAR")
+        row["UCR"] = verifier.get("UCR")
+        row["comparison_count"] = verifier.get("comparison_count")
+        row["supported_comparison_count"] = verifier.get("supported_comparison_count")
+        row["unsupported_comparison_count"] = verifier.get("unsupported_comparison_count")
+    return rows
+
+
 def _openai_judge(prompt: str, model: str) -> dict[str, Any]:
     from openai import OpenAI
 
@@ -1090,12 +1118,36 @@ def _maybe_drop_single_dataset_column(tab: pd.DataFrame) -> pd.DataFrame:
     return tab
 
 
+
+def _normalize_grouping_fields(df: pd.DataFrame) -> pd.DataFrame:
+    """Ignore nuisance count fields that do not define the protected-unit condition.
+
+    For user-level runs, the number of underlying records may vary across seeds
+    even when the selected user count and all release parameters are identical.
+    That record count must therefore not split user-level aggregation groups.
+    Symmetrically, user-count and clipping-bound fields must not split record-level
+    groups.
+    """
+    if df.empty or "protected_unit" not in df.columns:
+        return df.copy()
+    out = df.copy()
+    unit = out["protected_unit"].astype(str).str.lower()
+    if "n_records_effective" in out.columns:
+        out.loc[unit.eq("user"), "n_records_effective"] = np.nan
+    if "n_users_effective" in out.columns:
+        out.loc[unit.eq("record"), "n_users_effective"] = np.nan
+    if "user_contribution_bound" in out.columns:
+        out.loc[~unit.eq("user"), "user_contribution_bound"] = np.nan
+    return out
+
+
 def _make_dpspin_table(df: pd.DataFrame, path: Path) -> None:
     """Write the DP-SPIN release-conditioned OpenAI evaluation table."""
     ensure_dir(path.parent)
     # Accept either the full judgments dataframe or a pre-filtered DP-SPIN one.
     if not df.empty and "method" in df.columns:
         df = df[df["method"].astype(str).eq("DP-SPIN private plan")].copy()
+    df = _normalize_grouping_fields(df)
     dataset_slug, dataset_phrase, label_suffix = _dataset_scope_from_df(df)
     if df.empty:
         content = "% No DP-SPIN OpenAI judgments found.\n"
@@ -1123,7 +1175,7 @@ def _make_dpspin_table(df: pd.DataFrame, path: Path) -> None:
         for col in numeric:
             vals = pd.to_numeric(g[col], errors="coerce").dropna()
             if col == "privacy_safety":
-                label = "Judge privacy safety"
+                label = "Text safety"
             else:
                 label = col.capitalize().replace("_", " ")
             row[label] = _fmt_mean_std(vals.mean(), vals.std(), len(vals)) if len(vals) else "--"
@@ -1269,6 +1321,7 @@ def _make_baseline_table(df: pd.DataFrame, path: Path, methods: Iterable[str] | 
     """Write the release-conditioned OpenAI baseline comparison table."""
     ensure_dir(path.parent)
     df = _filter_df_by_method(df, methods)
+    df = _normalize_grouping_fields(df)
     dataset_slug, dataset_phrase, label_suffix = _dataset_scope_from_df(df)
     if df.empty:
         content = "% No OpenAI judgments found for the selected methods.\n"
@@ -1309,7 +1362,7 @@ def _make_baseline_table(df: pd.DataFrame, path: Path, methods: Iterable[str] | 
         for col in numeric:
             vals = pd.to_numeric(g[col], errors="coerce").dropna()
             if col == "privacy_safety":
-                label = "Judge privacy safety"
+                label = "Text safety"
             else:
                 label = col.capitalize().replace("_", " ")
             row[label] = _fmt_mean_std(vals.mean(), vals.std(), len(vals)) if len(vals) else "--"
@@ -1351,6 +1404,7 @@ def _make_baseline_table(df: pd.DataFrame, path: Path, methods: Iterable[str] | 
 def _make_private_non_private_eval_table(df: pd.DataFrame, path: Path) -> None:
     """Write the table comparing DP-SPIN display summaries with offline non-private references."""
     ensure_dir(path.parent)
+    df = _normalize_grouping_fields(df)
     dataset_caption = _dataset_caption_name(df)
     label_suffix = _latex_label_slug(dataset_caption)
     if df.empty:
@@ -1361,7 +1415,6 @@ def _make_private_non_private_eval_table(df: pd.DataFrame, path: Path) -> None:
         ("text_bigram_jaccard", "$J_2$"),
         ("text_keyphrase_jaccard", "$J_{\\mathrm{kp}}$"),
         ("text_tfidf_cosine", "$\\mathsf{Cos}_{\\mathrm{tfidf}}$"),
-        ("embedding_summary_embedding_cosine", "$\\mathsf{Cos}_{\\mathrm{emb}}$"),
     ]
     rows: list[dict[str, Any]] = []
     # Group by the full DP-SPIN release condition.  Grouping only by mechanism
@@ -1795,6 +1848,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
             all_baseline_rows = pd.read_csv(baseline_csv).to_dict(orient="records")
         if judgments_csv.exists() and judgments_csv.stat().st_size > 0:
             judgments = pd.read_csv(judgments_csv)
+        all_dpspin_rows = _refresh_reverified_openai_fields(all_dpspin_rows)
         print(f"[Report-only] Loaded {len(all_dpspin_rows)} DP-SPIN rows and {len(all_baseline_rows)} baseline rows from {root}")
     else:
         if args.run_dpspin:
@@ -1937,7 +1991,7 @@ def main() -> None:
     """Run the OpenAI evaluation pipeline from the command line."""
     p = argparse.ArgumentParser(description="Run cross-dataset OpenAI representative decoding, baselines, judging, and reporting.")
     p.add_argument("--dataset", choices=["all", *DATASET_SPECS.keys()], default="all")
-    p.add_argument("--output-dir", default="outputs/openai_paper_report")
+    p.add_argument("--output-dir", default="outputs/openai_paper")
     p.add_argument("--model", default="gpt-4o-mini")
     p.add_argument("--temperature", type=float, default=0.0)
     p.add_argument("--max-tokens", type=int, default=700)
@@ -1969,7 +2023,7 @@ def main() -> None:
     p.add_argument("--run-urania", action=argparse.BooleanOptionalAction, default=True, help="Generate and include the URANIA-style public-keyword baseline.")
     p.add_argument("--dpspin-judge-backend", choices=["none", "heuristic", "openai"], default="none", help="Optional legacy DP-SPIN-only plan-conditioned judge. The paper tables use --generic-judge-backend.")
     p.add_argument("--comparative-backend", choices=["none", "heuristic", "openai"], default="none")
-    p.add_argument("--summary-embedding-backend", choices=["tfidf", "auto", "sentence_transformer"], default="tfidf")
+    p.add_argument("--summary-embedding-backend", choices=["none", "tfidf", "auto", "sentence_transformer"], default="tfidf")
     p.add_argument("--generic-judge-backend", choices=["none", "heuristic", "openai"], default="openai")
     p.add_argument("--run-dpspin", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--run-baselines", action=argparse.BooleanOptionalAction, default=True)

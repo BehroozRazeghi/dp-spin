@@ -330,7 +330,9 @@ def write_cfg(path, experiment_name, records, atoms, output_dir, n_records, m, K
         "config_role": "auto-generated base config; run_grid overwrites grid parameters from command-line arrays",
         "seed": 0,
         "decoder_backend": decoder_backend,
-        "prevalence_bins": {"very common": 0.20, "common": 0.10, "moderate": 0.05, "low": 0.0},
+        "decoder_contract_mode": "legacy_text",
+        "summary_embedding_backend": "none",
+        "support_bins": {"very high": 0.20, "high": 0.10, "moderate": 0.05, "low": 0.0},
     }
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
@@ -450,7 +452,9 @@ cfg = {
     "probe_atom_ids": [len(atoms) - 1],
     "seed": 0,
     "decoder_backend": "template",
-    "prevalence_bins": {"very common": 0.20, "common": 0.10, "moderate": 0.05, "low": 0.0},
+    "decoder_contract_mode": "legacy_text",
+    "summary_embedding_backend": "none",
+    "support_bins": {"very high": 0.20, "high": 0.10, "moderate": 0.05, "low": 0.0},
 }
 yaml.safe_dump(cfg, open("$PROBE_CFG", "w"), sort_keys=False)
 print(open("$PROBE_CFG").read())

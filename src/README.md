@@ -27,7 +27,7 @@ The decoder-visible release may contain:
 
 - admitted public atom labels and descriptions;
 - released noisy masses;
-- prevalence bins derived from a public denominator;
+- support bins derived from a public denominator;
 - public decoding instructions and verifier rules.
 
 The decoder must not receive:
@@ -45,11 +45,12 @@ Non-private references and target-dependent evaluation artifacts may be generate
 
 | Module | Responsibility |
 |---|---|
-| `assign.py` | Computes bounded record-to-atom semantic contributions and the internal aggregate semantic sketch. |
+| `assign.py` | Computes bounded and optionally abstaining record-to-atom contributions. |
 | `dp_mechanisms.py` | Implements the Gaussian sketch, Laplace sketch, and sparse private atom-admission mechanisms. |
 | `plan.py` | Constructs the decoder-visible semantic plan from a privatized sketch or sparse selected-value release. |
-| `decode.py` | Verbalizes a released semantic plan in audit or display mode. |
-| `verify.py` | Checks generated text against the public decoder contract. |
+| `claims.py` | Defines the structured claim language, deterministic verification, and exact rendering. |
+| `decode.py` | Verbalizes a released semantic plan. |
+| `verify.py` | Provides the restricted legacy text verifier. |
 | `run_experiment.py` | Executes one complete DP-SPIN experiment and writes its artifacts. |
 
 The main parameters are:
@@ -73,7 +74,7 @@ The main parameters are:
 | `prepare_reviews.py` | Converts Yelp, Amazon, or generic review data and preserves stable contributor identifiers when available. |
 | `split_records.py` | Creates disjoint auxiliary and protected target splits, including a streaming path for large JSONL files. |
 | `build_atoms.py` | Builds decoder-visible atom dictionaries from public data or the auxiliary split. |
-| `embed.py` | Defines the fixed TF-IDF representation used by the semantic contribution map. |
+| `embed.py` | Defines fixed word/character TF-IDF and optional pretrained sentence encoders. |
 | `dataset_stats.py` | Computes non-private dataset diagnostics and protocol statistics. |
 | `generate_demo_data.py` | Generates synthetic records for installation and pipeline checks. |
 
@@ -88,6 +89,8 @@ Atom naming and atom admission are separate operations. `build_atoms.py` fixes d
 | `probes.py` | Inserts controlled probe records using the current `probe` terminology. |
 | `review_probe.py` | Adds controlled probe-atom runs to Amazon or Yelp experiment families. |
 | `membership_attack.py` | Compares paired releases after one-record deletion as an empirical stability diagnostic. |
+| `synthetic_benchmark.py` | Runs controlled oracle-semantics experiments. |
+| `scaling_benchmark.py` | Measures release-time runtime, memory, and payload scaling. |
 
 Controlled probe-atom and one-record-deletion experiments are empirical diagnostics. They do not replace the formal differential-privacy guarantee.
 
@@ -98,7 +101,12 @@ Controlled probe-atom and one-record-deletion experiments are empirical diagnost
 | `metrics.py` | Computes semantic-plan utility, verifier, and controlled-probe metrics. |
 | `summary_eval.py` | Compares generated text with an offline non-private reference plan and summary. |
 | `judge_summary.py` | Applies heuristic or optional LLM evaluation relative to the decoder-visible release object. |
+| `human_eval.py` | Creates blinded common-ground tasks and aggregates completed annotations. |
 | `human_eval_interface.py` | Renders a static manual-evaluation page. |
+| `assignment_eval.py` | Evaluates assignment accuracy, coverage, abstention, and paired uncertainty. |
+| `external_validity.py` | Runs representation, transfer, and dictionary-stress studies. |
+| `repeated_trials.py` | Aggregates paired repetitions, confidence intervals, and variance components. |
+| `matched_protocol.py` | Checks protocol equality before cross-method comparison. |
 | `summarize_runs.py` | Aggregates repeated run directories into grouped CSV and JSON summaries. |
 | `plot_results.py` | Plots plan-utility and controlled-probe results from saved metrics. |
 | `report.py` | Generates dataset reports, LaTeX tables, and figures. |
@@ -139,9 +147,9 @@ For a DP-SPIN release, the OpenAI decoder receives only the released semantic pl
 Run package modules from the repository root so that relative imports resolve correctly:
 
 ```bash
-python -m src.run_experiment --config configs/demo.yaml
-python -m src.run_grid --config configs/demo.yaml --epsilons 0.5 1.0 2.0
-python -m src.metrics --run-dir outputs/demo/<run-directory>
+python -m src.run_experiment --config configs/demo_record.yaml
+python -m src.run_grid --config configs/demo_record.yaml --epsilons 0.5 1.0 2.0
+python -m src.report --runs-dir outputs/demo/record/runs --output-dir outputs/demo/record/reports
 ```
 
 Use the shell workflows in `scripts/` for the complete dataset-specific experiment grids and report-generation sequences.

@@ -1,0 +1,30 @@
+# Manifest rows require: dataset, target_sample_id, plan_path,
+# reference_plan_path, and reference_summary_path.
+manifest: outputs/decoder_external_validity/decoder_panel.jsonl
+require_at_least_two_decoders: true
+require_nonjudge_decoder: true
+comparison_margin: 0.0
+retain_prompts: false
+retain_raw_outputs: false
+
+decoders:
+  - name: open_weight_decoder
+    backend: hf_local
+    model: Qwen/Qwen2.5-1.5B-Instruct
+    revision: null  # replace with a pinned commit hash for reproducible runs
+    device_map: auto
+    local_files_only: false
+    trust_remote_code: false
+    temperature: 0.0
+    max_tokens: 500
+  - name: api_decoder
+    backend: openai
+    model: gpt-4o-mini
+    temperature: 0.0
+    max_tokens: 500
+
+judge:
+  backend: openai
+  model: gpt-4.1-mini
+  temperature: 0.0
+  max_tokens: 500

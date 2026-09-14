@@ -36,15 +36,17 @@ seed: 0
 
 # The template decoder verbalizes only the released semantic plan.
 decoder_backend: template
+decoder_contract_mode: legacy_text
+summary_embedding_backend: none
 
 # Descriptive provenance metadata saved with the run; this field is not an enforcement check.
 atom_source_protocol: >-
   probe atom dictionary is public;
   protected records are target/probe target split
 
-# Prevalence-bin thresholds, expressed as fractions of public_denominator.
-prevalence_bins:
-  very common: 0.20
-  common: 0.10
+# Support-bin thresholds, expressed as fractions of public_denominator.
+support_bins:
+  very high: 0.20
+  high: 0.10
   moderate: 0.05
   low: 0.0

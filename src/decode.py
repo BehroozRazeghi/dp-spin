@@ -1,11 +1,11 @@
 """Verbalize a released semantic plan.
 
-The decoder is post-processing of the released plan. For a DP-SPIN release, its input is limited to admitted public atoms, released noisy masses or prevalence
+The decoder is post-processing of the released plan. For a DP-SPIN release, its input is limited to admitted fixed atoms, released noisy masses or semantic-support
 bins, and public decoding instructions. It must not receive raw records, raw excerpts, per-record contribution vectors, non-private representatives, or
 non-admitted atom labels.
 
 The ``audit`` mode requests canonical atom markers for verifier checks. 
-Them ``display`` mode omits markers and exact noisy masses while preserving the same plan-only input boundary.
+The ``display`` mode omits markers and exact noisy masses while preserving the same plan-only input boundary.
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def _format_plan_entries(plan: dict) -> list[str]:
         marker = _atom_marker(a)
         lines.append(
             f"- {marker} label={a.get('label')} | description={a.get('description')} | "
-            f"bin={a.get('prevalence_bin')} | noisy_mass={noisy_mass:.3f}"
+            f"bin={a.get('support_bin')} | noisy_mass={noisy_mass:.3f}"
         )
     return lines
 
@@ -49,7 +49,7 @@ def render_prompt(
     
     ``audit`` requires canonical atom markers and permits released noisy masses so
     the public verifier can check atom and numeric claims. ``display`` omits atom
-    identifiers and exact noisy masses and permits only prevalence language supported
+    identifiers and exact noisy masses and permits only semantic-support language supported
     by the released bins.
     """
     if mode not in DECODER_MODES:
@@ -67,7 +67,7 @@ def render_prompt(
             "2. Do not invent examples, names, organizations, dates, quotes, events, locations, or subgroups.",
             "3. Do not mention individual records or claim to have seen raw records.",
             "4. Do not infer causes, demographics, product identities, businesses, user groups, or subgroups beyond the atom labels and descriptions.",
-            "5. Use prevalence language only from the released prevalence bins. Do not report exact noisy masses.",
+            "5. Use semantic-support language only from the released support bins. Do not report exact noisy masses or interpret semantic support as a record count, fraction, or frequency.",
             "6. Do not include atom identifiers such as [atom:<id>] in the output.",
             "7. If the plan is low-support, noisy, or ambiguous, state uncertainty rather than adding unsupported content.",
             "8. Write one concise paragraph followed by at most three short bullets only if bullets improve clarity.",
@@ -82,8 +82,8 @@ def render_prompt(
             "2. Do not invent examples, names, organizations, dates, quotes, or events.",
             "3. Do not mention individual records or claim to have seen raw records.",
             "4. Do not infer causes, demographics, locations, product identities, businesses, user groups, or subgroups beyond the atom labels and descriptions.",
-            "5. Use prevalence language only according to the released prevalence bins and released noisy masses.",
-            "6. Comparisons such as 'more common than' are allowed only when supported by the released noisy masses.",
+            "5. Use semantic-support language only according to the released support bins and released noisy masses. Do not interpret semantic support as a record count, fraction, or frequency.",
+            "6. Comparisons such as 'higher support than' are allowed only when supported by the released noisy masses.",
             "7. If the plan is low-support, noisy, or ambiguous, state uncertainty rather than adding unsupported content.",
         ]
     if verifier_feedback:
@@ -115,7 +115,7 @@ def template_decode(plan: dict, mode: str = "audit") -> str:
         return f"The {plan_name} did not admit any aggregate themes."
 
     def phrase(a: dict) -> str:
-        b = a.get("prevalence_bin")
+        b = a.get("support_bin")
         label = a.get("label")
         if mode == "display":
             return f"{label}" + (f" ({b})" if b else "")
@@ -127,7 +127,7 @@ def template_decode(plan: dict, mode: str = "audit") -> str:
         paragraph = (
             f"The {plan_name} identifies the following aggregate themes: "
             + ", ".join(phrase(a) for a in top)
-            + ". The summary is restricted to admitted plan entries and prevalence bins shown in the plan."
+            + ". The summary is restricted to admitted plan entries and support bins shown in the plan."
         )
         bullets = "\n".join(f"- {phrase(a)}: {a.get('description','')}" for a in atoms[:3])
     else:
@@ -162,7 +162,7 @@ def main() -> None:
     p.add_argument("--plan", required=True)
     p.add_argument("--summary-output", "--output", dest="summary_output", required=True)
     p.add_argument("--prompt-output", default=None)
-    p.add_argument("--backend", choices=["template", "openai"], default="template")
+    p.add_argument("--backend", choices=["template", "openai", "hf_local"], default="template")
     p.add_argument("--model", default="gpt-4o-mini")
     p.add_argument("--temperature", type=float, default=0.0)
     p.add_argument("--max-tokens", type=int, default=700)

@@ -20,8 +20,10 @@ probe_atom_ids:
 - 200
 seed: 0
 decoder_backend: template
-prevalence_bins:
-  very common: 0.2
-  common: 0.1
+decoder_contract_mode: legacy_text
+summary_embedding_backend: none
+support_bins:
+  very high: 0.2
+  high: 0.1
   moderate: 0.05
   low: 0.0

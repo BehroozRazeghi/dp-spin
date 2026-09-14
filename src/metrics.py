@@ -27,7 +27,7 @@ def sketch_metrics(C: np.ndarray, C_tilde: np.ndarray, L: int) -> dict[str, floa
     Value-error metrics are computed from the raw noisy values saved in
     ``noisy_sketch.npy`` before optional nonnegative display clipping in the
     released plan. This convention matches the perturbation analysis; displayed
-    masses and prevalence bins may be computed from clipped nonnegative values.
+    masses and support bins may be computed from clipped nonnegative values.
     """
     non_private_top = topL(C, L)
     released_support = topL(C_tilde, L)

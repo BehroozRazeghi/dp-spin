@@ -1,0 +1,113 @@
+# External-validity experiments. Replace paths with the omitted local data,
+# public dictionaries, completed annotations, and auxiliary calibration data.
+embedding_family_experiment:
+  records: data/protected_target/cfpb_target_records.jsonl
+  atoms: data/public_atoms/cfpb_atoms_m200.json
+  annotations: data/annotations/cfpb_assignment_annotations.jsonl
+  public_fit_records: data/auxiliary/cfpb_atom_auxiliary_records.jsonl
+  public_fit_max_records: 20000
+  # Use at least one lexical representation and one fixed pretrained semantic
+  # encoder. Pin a model revision/commit for reproducible runs.
+  embedding_families:
+    - name: word_tfidf
+      embedding_family: tfidf_word
+    - name: character_tfidf
+      embedding_family: tfidf_char
+    - name: minilm_sentence_encoder
+      embedding_family: sentence_transformer
+      embedding_model_name: sentence-transformers/all-MiniLM-L6-v2
+      embedding_model_revision: null  # replace with a pinned model revision
+      embedding_model_batch_size: 64
+      embedding_model_device: null
+      embedding_model_local_files_only: false
+      embedding_model_trust_remote_code: false
+  paired_reference: word_tfidf
+  paired_metrics: [top1_precision, topK_recall, coverage_rate, selective_risk]
+  paired_bootstrap_replicates: 2000
+  paired_bootstrap_confidence: 0.95
+  paired_bootstrap_seed: 2026
+  assignment:
+    K: 3
+    gamma: 10.0
+    similarity_threshold: 0.10
+    abstention_mode: zero
+    mass_mode: confidence
+    error_cost: 1.0
+    abstention_cost: 0.25
+    bootstrap_replicates: 2000
+    bootstrap_confidence: 0.95
+    bootstrap_seed: 2026
+
+dictionary_transfer_experiment:
+  assignment:
+    K: 3
+    gamma: 10.0
+    similarity_threshold: 0.10
+    abstention_mode: zero
+    mass_mode: confidence
+    bootstrap_replicates: 2000
+    bootstrap_seed: 2026
+  transfer_tasks:
+    - name: cfpb_early_to_late
+      source_domain: CFPB complaints
+      target_domain: CFPB complaints
+      source_period: 2017-2021
+      target_period: 2022-2025
+      target_records: data/protected_target/cfpb_target_2022_2025.jsonl
+      source_atoms: data/public_atoms/cfpb_atoms_2017_2021_m200.json
+      source_public_fit_records: data/auxiliary/cfpb_auxiliary_2017_2021.jsonl
+      target_annotations: data/annotations/cfpb_target_2022_2025_annotations_against_source.jsonl
+      matched_target_atoms: data/public_atoms/cfpb_atoms_2022_2025_m200.json
+      matched_target_public_fit_records: data/auxiliary/cfpb_auxiliary_2022_2025.jsonl
+      matched_target_annotations: data/annotations/cfpb_target_2022_2025_annotations_against_target.jsonl
+      conditions:
+        - name: word_tfidf
+          embedding_family: tfidf_word
+        - name: minilm_sentence_encoder
+          embedding_family: sentence_transformer
+          embedding_model_name: sentence-transformers/all-MiniLM-L6-v2
+          embedding_model_revision: null  # pin before reproducible runs
+    - name: amazon_to_yelp_stress
+      source_domain: Amazon All Beauty
+      target_domain: Yelp Restaurants
+      source_period: public auxiliary split
+      target_period: protected target split
+      target_records: data/protected_target/yelp_restaurants_target_records.jsonl
+      source_atoms: data/public_atoms/amazon_All_Beauty_atoms_m100.json
+      source_public_fit_records: data/auxiliary/amazon_All_Beauty_atom_auxiliary_records.jsonl
+      target_annotations: data/annotations/yelp_annotations_against_amazon_dictionary.jsonl
+      matched_target_atoms: data/public_atoms/yelp_restaurants_atoms_m100.json
+      matched_target_public_fit_records: data/auxiliary/yelp_restaurants_atom_auxiliary_records.jsonl
+      matched_target_annotations: data/annotations/yelp_annotations_against_yelp_dictionary.jsonl
+      conditions:
+        - name: word_tfidf
+          embedding_family: tfidf_word
+        - name: minilm_sentence_encoder
+          embedding_family: sentence_transformer
+          embedding_model_name: sentence-transformers/all-MiniLM-L6-v2
+          embedding_model_revision: null
+
+misspecification_experiment:
+  records: data/protected_target/cfpb_target_records.jsonl
+  atoms: data/public_atoms/cfpb_atoms_m200.json
+  annotations: data/annotations/cfpb_assignment_annotations.jsonl
+  public_fit_records: data/auxiliary/cfpb_atom_auxiliary_records.jsonl
+  # The operating threshold is selected only on this disjoint annotated
+  # auxiliary/calibration set. Without these paths, the target grid is purely
+  # descriptive and no threshold is labeled recommended.
+  calibration_records: data/auxiliary/cfpb_assignment_calibration_records.jsonl
+  calibration_annotations: data/annotations/cfpb_assignment_calibration_annotations.jsonl
+  fractions: [0.0, 0.1, 0.3, 0.5]
+  misspecification_modes: [drop_random, drop_frequent_gold, shuffle_descriptions]
+  seeds: [0, 1, 2, 3, 4]
+  abstention_thresholds: [0.0, 0.05, 0.10, 0.20, 0.30]
+  abstention_costs: [0.05, 0.10, 0.25, 0.50]
+  assignment:
+    K: 3
+    gamma: 10.0
+    embedding_family: tfidf_word
+    mass_mode: confidence
+    error_cost: 1.0
+    bootstrap_replicates: 1000
+    bootstrap_confidence: 0.95
+    bootstrap_seed: 2026

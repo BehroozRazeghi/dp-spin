@@ -1,0 +1,66 @@
+embedding_family_experiment:
+  records: data/processed/demo_external_records.jsonl
+  atoms: data/public_atoms/demo_atoms.json
+  annotations: data/annotations/demo_external_annotations.jsonl
+  embedding_families:
+    - name: word_tfidf
+      embedding_family: tfidf_word
+    - name: character_tfidf
+      embedding_family: tfidf_char
+  paired_reference: word_tfidf
+  paired_bootstrap_replicates: 200
+  paired_bootstrap_seed: 7
+  assignment:
+    K: 3
+    gamma: 10.0
+    similarity_threshold: 0.10
+    abstention_mode: zero
+    mass_mode: confidence
+    error_cost: 1.0
+    abstention_cost: 0.25
+    bootstrap_replicates: 200
+    bootstrap_seed: 7
+
+dictionary_transfer_experiment:
+  assignment:
+    K: 3
+    gamma: 10.0
+    similarity_threshold: 0.10
+    abstention_mode: zero
+    mass_mode: confidence
+    bootstrap_replicates: 200
+    bootstrap_seed: 7
+  transfer_tasks:
+    - name: demo_subset_dictionary_to_full_target
+      source_domain: demo_support_subset
+      target_domain: demo_support_full_plus_ood
+      source_period: auxiliary_v1
+      target_period: target_v2
+      target_records: data/processed/demo_external_records.jsonl
+      source_atoms: data/public_atoms/demo_atoms_source_subset.json
+      target_annotations: data/annotations/demo_external_annotations.jsonl
+      matched_target_atoms: data/public_atoms/demo_atoms.json
+      matched_target_annotations: data/annotations/demo_external_annotations.jsonl
+      conditions:
+        - name: word_tfidf
+          embedding_family: tfidf_word
+        - name: character_tfidf
+          embedding_family: tfidf_char
+
+misspecification_experiment:
+  records: data/processed/demo_external_records.jsonl
+  atoms: data/public_atoms/demo_atoms.json
+  annotations: data/annotations/demo_external_annotations.jsonl
+  fractions: [0.0, 0.2, 0.4]
+  misspecification_modes: [drop_random, drop_frequent_gold, shuffle_descriptions]
+  seeds: [0, 1]
+  abstention_thresholds: [0.0, 0.10, 0.20]
+  abstention_costs: [0.10, 0.25, 0.50]
+  assignment:
+    K: 3
+    gamma: 10.0
+    embedding_family: tfidf_word
+    mass_mode: confidence
+    error_cost: 1.0
+    bootstrap_replicates: 100
+    bootstrap_seed: 7

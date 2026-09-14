@@ -43,6 +43,12 @@ Mechanism identifiers:
 | `run_amazon.sh` | Amazon record-level and user-level dataset runner | Yes | Only when an OpenAI decoder or atom-refinement backend is selected |
 | `run_yelp.sh` | Yelp record-level and user-level dataset runner | Yes | Only when an OpenAI decoder or atom-refinement backend is selected |
 | `run_demo.sh` | Synthetic demonstration | Yes | No |
+| `run_validation_smoke.sh` | Automated tests and local synthetic validation | Yes | No |
+| `run_synthetic_benchmark.sh` | Controlled ground-truth benchmark | Yes | No |
+| `run_verifier_benchmark.sh` | Finite structured-claim verifier benchmark | No | No |
+| `run_external_validity.sh` | Assignment-family, transfer, and dictionary-stress evaluation | No | No |
+| `run_decoder_external_validity.sh` | Multi-decoder evaluation with distinct model roles | No | Optional |
+| `run_scaling_benchmark.sh` | Release-time runtime, memory, and payload benchmark | Yes | No |
 | `run_amazon_missing_KL_only.sh` | Append missing Amazon `K`-by-`L` operating points | Yes | No |
 | `run_review_probe_only.sh` | Append Amazon and/or Yelp controlled-probe runs | Yes | No |
 | `run_openai_paper.sh` | OpenAI verbalization, baselines, release-conditioned evaluation, and manuscript tables | No | Yes, unless `REPORT_ONLY=1` |
@@ -69,7 +75,7 @@ Workflow-specific requirements:
 
 - Yelp download through Kaggle requires the Kaggle CLI, configured credentials, and prior acceptance of the applicable dataset terms.
 - OpenAI verbalization, OpenAI judging, or OpenAI-assisted auxiliary atom refinement requires `OPENAI_API_KEY`.
-- `summary_embedding_backend=sentence_transformer` or `auto` may require `sentence-transformers`; the default `tfidf` backend does not.
+- `summary_embedding_backend=sentence_transformer` or `auto` may require `sentence-transformers`; the paper grid default `none` disables the redundant secondary embedding metric.
 
 ## Dataset runners
 
@@ -187,7 +193,7 @@ Execution and data preparation:
 | `FORCE_PREP` | `0` | Rebuild preparation artifacts |
 | `RUN_RECORD` | `1` | Run record-level experiments |
 | `RUN_USER` | `1` | Run user-level experiments |
-| `CLEAN_RUNS` | `1` | Delete the selected main-grid run directories before execution |
+| `CLEAN_RUNS` | `0` | Preserve existing runs by default; set to `1` to delete selected main-grid run directories before execution |
 | `SKIP_EXISTING` | `0` | Pass `--skip-existing` to grid and probe runners |
 | `RUN_PROBE` | `1` | Run the controlled-probe experiment |
 | `AMAZON_CATEGORY` | `All_Beauty` | Amazon Reviews 2023 category |
@@ -236,7 +242,7 @@ Decoder and secondary text evaluation:
 | `CLEAN_REFERENCE_DECODER_BACKEND` | `template` | Decoder for the non-private plan reference |
 | `CLEAN_REFERENCE_DECODER_MODEL` | `DECODER_MODEL` | Model for the non-private plan reference |
 | `SUMMARY_COMPARATIVE_EVAL_BACKEND` | `none` | `none`, `heuristic`, or `openai` |
-| `SUMMARY_EMBEDDING_BACKEND` | `tfidf` | `tfidf`, `auto`, or `sentence_transformer` |
+| `SUMMARY_EMBEDDING_BACKEND` | `none` | `none`, `tfidf`, `auto`, or `sentence_transformer` |
 | `AMAZON_EMBEDDING_FIT_MAX_RECORDS` | empty | Optional auxiliary fit-set limit |
 
 Controlled-probe settings:
@@ -318,7 +324,7 @@ Execution and data preparation:
 | `FORCE_PREP` | `0` | Rebuild preparation artifacts |
 | `RUN_RECORD` | `1` | Run record-level experiments |
 | `RUN_USER` | `1` | Run user-level experiments |
-| `CLEAN_RUNS` | `1` | Delete the selected main-grid run directories before execution |
+| `CLEAN_RUNS` | `0` | Preserve existing runs by default; set to `1` to delete selected main-grid run directories before execution |
 | `SKIP_EXISTING` | `0` | Pass `--skip-existing` to grid and probe runners |
 | `RUN_PROBE` | `1` | Run the controlled-probe experiment |
 | `SKIP_FULL_DATASET_STATS` | `1` | Skip statistics for the full processed corpus to reduce memory use |
@@ -369,7 +375,7 @@ Decoder, text evaluation, and auxiliary representation fitting:
 | `CLEAN_REFERENCE_DECODER_BACKEND` | `template` | Decoder for the non-private plan reference |
 | `CLEAN_REFERENCE_DECODER_MODEL` | `DECODER_MODEL` | Model for the non-private plan reference |
 | `SUMMARY_COMPARATIVE_EVAL_BACKEND` | `none` | `none`, `heuristic`, or `openai` |
-| `SUMMARY_EMBEDDING_BACKEND` | `tfidf` | `tfidf`, `auto`, or `sentence_transformer` |
+| `SUMMARY_EMBEDDING_BACKEND` | `none` | `none`, `tfidf`, `auto`, or `sentence_transformer` |
 | `YELP_EMBEDDING_FIT_MAX_RECORDS` | `50000` | Maximum auxiliary records used to fit the text representation; empty means all |
 | `YELP_EMBEDDING_FIT_SELECTION` | `hash` | Auxiliary fit-subset selection rule |
 | `YELP_EMBEDDING_FIT_SEED` | `1729` | Auxiliary fit-subset seed |
@@ -490,7 +496,7 @@ The primary Amazon and Yelp runners already execute these conditions when `RUN_P
 bash scripts/run_demo.sh
 ```
 
-All generated artifacts are written under `outputs/demo/` or `outputs/baselines/demo/`. The script does not require an external dataset or API key.
+All generated artifacts are written under `outputs/demo/` or `outputs/baselines/demo/`. Existing demo artifacts are preserved by default; set `CLEAN_DEMO=1` to remove them before execution. The script does not require an external dataset or API key.
 
 ## OpenAI workflows
 
@@ -596,3 +602,16 @@ bash scripts/build_openai_main_tables.sh
 Run directories contain both releasable outputs and non-private evaluation artifacts. The releasable interface is the differentially private semantic plan together with outputs computed only from that plan and public objects. The non-private semantic sketch, reference plan, reference summary, clipped user assignments, protected target records, and target-derived baselines are evaluation artifacts and must not be exposed as deployment outputs.
 
 Controlled-probe runs add records containing a fixed public pattern and add its atom to the public dictionary before release. They measure admission of that known coordinate and its mention after verbalization. They do not test whether a new private atom can be discovered or named from protected text.
+
+
+## External-validity and scaling workflows
+
+| Script | Purpose |
+|---|---|
+| `run_external_validity.sh` | Compare at least two fixed assignment representations, evaluate domain/time dictionary transfer against a matched target dictionary, and run calibrated misspecification/abstention stress tests. |
+| `run_decoder_external_validity.sh` | Evaluate at least two decoder conditions while enforcing a learned decoder distinct from the automated judge; supports a pinned local/open-weight revision. |
+| `run_scaling_benchmark.sh` | Measure release-time runtime, peak Python-tracked memory, and numeric plan payload as dictionary size and released-plan size grow. |
+
+Reproducible runs should use `configs/external_validity_template.yaml` only after replacing all paths, pinning pretrained model revisions, and providing disjoint auxiliary calibration annotations. The target test set must not be used to tune the abstention threshold. `drop_frequent_gold` is deliberately evaluation-only because it uses target gold annotations to construct an adversarial misspecified dictionary.
+
+The scaling benchmark includes perturbation, atom admission or deterministic Top-`L` materialization, and construction of the minimal numeric `(index, value)` payload. It excludes semantic-assignment and decoder latency. `tracemalloc` does not reliably capture all native-library or accelerator allocations; publish the recorded hardware/software manifest and, for GPU runs, add an external device-memory measurement.

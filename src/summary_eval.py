@@ -112,13 +112,20 @@ def embedding_similarity_metrics(
     backend: str = "tfidf",
     model_name: str = "sentence-transformers/all-mpnet-base-v2",
 ) -> dict[str, Any]:
-    """Compute summary-level semantic similarity.
+    """Compute optional summary-level semantic similarity.
 
+    ``backend='none'`` disables this redundant secondary metric.
     ``backend='sentence_transformer'`` uses a SentenceTransformer if available.
     ``backend='tfidf'`` is dependency-light and deterministic.  ``backend='auto'``
     attempts SentenceTransformer first and falls back to TF-IDF.
     """
     backend = str(backend or "tfidf").lower()
+    if backend in {"none", "off", "disabled"}:
+        return {
+            "summary_embedding_cosine": None,
+            "summary_embedding_backend": "none",
+            "summary_embedding_model": None,
+        }
     if backend in {"sentence_transformer", "sentence-transformers", "sbert", "auto"}:
         val, used, err = _sentence_transformer_cosine(dp_summary, clean_summary, model_name)
         if math.isfinite(val):
@@ -139,7 +146,7 @@ def _atom_lines(plan: dict) -> list[str]:
         lines.append(
             f"[atom:{a.get('atom_id')}] label={a.get('label')} | "
             f"description={a.get('description')} | mass={float(a.get('noisy_mass', 0.0)):.3f} | "
-            f"bin={a.get('prevalence_bin')}"
+            f"bin={a.get('support_bin')}"
         )
     return lines
 
@@ -305,7 +312,7 @@ def evaluate_run_dir(run_dir: str | Path, overwrite: bool = True) -> dict[str, A
     private_plan = read_json(rd / "private_plan.json")
     L = int(cfg.get("L", private_plan.get("L", len(private_plan.get("selected_atoms", [])))))
     public_denominator = private_plan.get("public_denominator", cfg.get("public_denominator"))
-    bins = cfg.get("prevalence_bins")
+    bins = cfg.get("support_bins")
     clean_plan_path = rd / "clean_reference_plan.json"
     clean_summary_path = rd / "clean_reference_summary.txt"
     if clean_plan_path.exists() and not overwrite:

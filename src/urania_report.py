@@ -407,7 +407,7 @@ def _numeric_values_released(method: MethodArtifact) -> str:
             vals.append("noisy keyword counts")
         return ", ".join(vals) if vals else "keyword ranks"
     atoms = plan.get("selected_atoms", [])
-    if isinstance(atoms, list) and any(isinstance(a, dict) and ("noisy_mass" in a or "prevalence_bin" in a) for a in atoms):
+    if isinstance(atoms, list) and any(isinstance(a, dict) and ("noisy_mass" in a or "support_bin" in a) for a in atoms):
         return "noisy masses or bins"
     return "No"
 

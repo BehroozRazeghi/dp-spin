@@ -350,7 +350,7 @@ def _ensure_clean_reference_plan(src_run: Path, dst_run: Path, cfg: dict[str, An
     atoms = read_json(atoms_path)
     L = int(cfg.get("L", private_plan.get("L", len(private_plan.get("selected_atoms", [])))))
     public_denominator = private_plan.get("public_denominator", cfg.get("public_denominator"))
-    bins = cfg.get("prevalence_bins")
+    bins = cfg.get("support_bins")
     clean_plan = build_clean_reference_plan(C, atoms, L=L, public_denominator=public_denominator, bins=bins)
     write_json(clean_plan, dst_plan)
     return clean_plan
@@ -527,6 +527,9 @@ def _decode_one(
         "verifier_accept": verifier.get("accept"),
         "UAR": verifier.get("UAR"),
         "UCR": verifier.get("UCR"),
+        "comparison_count": verifier.get("comparison_count"),
+        "supported_comparison_count": verifier.get("supported_comparison_count"),
+        "unsupported_comparison_count": verifier.get("unsupported_comparison_count"),
         "summary_path": str(dp_display_summary_path),
         "summary_display_path": str(dp_display_summary_path),
         "summary_audit_path": str(dp_audit_summary_path),
@@ -560,7 +563,9 @@ def _write_csv(rows: list[dict[str, Any]], path: Path) -> None:
     preferred = [
         "dataset", "protected_unit", "mechanism", "epsilon", "seed", "m", "K", "L",
         "user_contribution_bound", "n_records_effective", "n_users_effective",
-        "verifier_accept", "UAR", "UCR", "summary_path", "clean_reference_summary_path",
+        "verifier_accept", "UAR", "UCR", "comparison_count",
+        "supported_comparison_count", "unsupported_comparison_count",
+        "summary_path", "clean_reference_summary_path",
     ]
     cols = [c for c in preferred if c in cols] + [c for c in cols if c not in preferred]
     with path.open("w", encoding="utf-8", newline="") as f:
@@ -664,7 +669,7 @@ def main() -> None:
     p.add_argument("--max-runs-per-dataset", type=int, default=None)
     p.add_argument("--judge-backend", choices=["none", "heuristic", "openai"], default="none", help="Optional legacy plan-conditioned DP-SPIN judge; paper comparisons use src.openai_paper_pipeline.")
     p.add_argument("--comparative-backend", choices=["none", "heuristic", "openai"], default="none")
-    p.add_argument("--summary-embedding-backend", choices=["tfidf", "auto", "sentence_transformer"], default="tfidf")
+    p.add_argument("--summary-embedding-backend", choices=["none", "tfidf", "auto", "sentence_transformer"], default="tfidf")
     p.add_argument("--force", action="store_true")
     args = p.parse_args()
     rows = run_openai_decoding(args)

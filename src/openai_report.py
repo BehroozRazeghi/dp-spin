@@ -107,7 +107,9 @@ def collect_dpspin_runs(openai_dir: Path) -> pd.DataFrame:
             except Exception as e:
                 row["judge_error"] = str(e)
 
-        verifierp = run / "verifier_openai.json"
+        verifierp = run / "verifier_openai_reverified.json"
+        if not verifierp.exists():
+            verifierp = run / "verifier_openai.json"
         if verifierp.exists():
             try:
                 verifier = read_json(verifierp)
@@ -179,6 +181,8 @@ def make_dpspin_latex(df: pd.DataFrame, out_tex: Path) -> None:
             row["UAR"] = f"{g['verifier_UAR'].mean():.2f}"
         if "verifier_UCR" in g.columns:
             row["UCR"] = f"{g['verifier_UCR'].mean():.2f}"
+        if "verifier_comparison_count" in g.columns:
+            row["Comparisons"] = f"{g['verifier_comparison_count'].mean():.2f}"
         if "verifier_accept" in g.columns:
             row["Accept"] = f"{int(g['verifier_accept'].sum())}/{len(g)}"
 

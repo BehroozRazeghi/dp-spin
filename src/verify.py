@@ -1,6 +1,6 @@
 """Check generated text against the public decoder contract.
 
-The verifier receives the released semantic plan, public atom metadata, public prevalence-bin definitions, and the generated summary. It does not read protected
+The verifier receives the released semantic plan, public atom metadata, public support-bin definitions, and the generated summary. It does not read protected
 records or the non-private semantic sketch. The checks establish syntactic and numeric consistency with the released plan; they do not establish truth or completeness relative to the protected corpus.
 
 Canonical markers such as ``[atom:17]`` provide the strongest atom-reference check. Literal public-label matching is used when a summary omits markers.
@@ -26,17 +26,17 @@ _QUOTE_RE = re.compile(r"[\"“”‘’][^\"“”‘’]{12,}[\"“”‘’]"
 _PROPER_NAME_RE = re.compile(r"\b(?:Mr\.|Mrs\.|Ms\.|Dr\.)\s+[A-Z][a-z]+\b")
 
 _COMPARISON_PATTERNS = [
-    ("more_common_than", re.compile(r"(.{0,90}?)\b(?:more common|more prevalent|higher|larger|greater)\s+than\b(.{0,90})", re.IGNORECASE)),
-    ("less_common_than", re.compile(r"(.{0,90}?)\b(?:less common|less prevalent|lower|smaller)\s+than\b(.{0,90})", re.IGNORECASE)),
+    ("higher_support_than", re.compile(r"(.{0,90}?)\b(?:higher(?: semantic)? support)\s+than\b(.{0,90})", re.IGNORECASE)),
+    ("lower_support_than", re.compile(r"(.{0,90}?)\b(?:lower(?: semantic)? support)\s+than\b(.{0,90})", re.IGNORECASE)),
 ]
 _SUPERLATIVE_WORDS = {
-    "most common", "most prevalent", "largest", "highest", "dominant", "primary", "top theme", "leading theme"
+    "highest support", "highest semantic support", "highest released rank", "top-ranked theme"
 }
 
 # Explicit importance-ordering language is rejected unless a future release
 # mechanism adds a separate differentially private importance score to the plan.
 # In the current DP-SPIN plan, the supported quantitative notions are released
-# noisy mass, prevalence bin, and released rank.
+# noisy mass, support bin, and released rank.
 _UNSUPPORTED_IMPORTANCE_RE = re.compile(
     r"\b(?:more|less)\s+important\s+than\b|"
     r"\b(?:higher|lower)\s+importance\s+than\b|"
@@ -143,7 +143,7 @@ def _detect_raw_detail_violations(summary: str) -> list[dict[str, str]]:
 def _detect_unsupported_importance_claims(summary: str) -> list[dict[str, str]]:
     """Detect explicit importance-ordering claims unsupported by the current plan.
 
-    The current DP-SPIN plan releases noisy masses, prevalence bins, and ranks,
+    The current DP-SPIN plan releases noisy masses, support bins, and ranks,
     but it does not release a separate importance score.  Therefore claims such
     as ``more important than`` or ``most important`` are rejected as unsupported
     unless a future mechanism explicitly releases differentially private
@@ -155,7 +155,7 @@ def _detect_unsupported_importance_claims(summary: str) -> list[dict[str, str]]:
             "type": "unsupported_importance_claim",
             "match": m.group(0),
             "reason": (
-                "the released plan contains noisy masses, prevalence bins, and ranks, "
+                "the released plan contains noisy masses, support bins, and ranks, "
                 "but no separate released importance score"
             ),
         })
@@ -171,7 +171,7 @@ def _allowed_numeric_values(plan: dict[str, Any]) -> list[float]:
             except Exception:
                 pass
         try:
-            p = a.get("prevalence")
+            p = a.get("semantic_support")
             if p is not None:
                 vals.append(float(p))
                 vals.append(100.0 * float(p))
@@ -210,22 +210,22 @@ def _detect_unsupported_numbers(summary: str, plan: dict[str, Any], tolerance_ab
 
 
 def _plan_bin_labels(plan: dict[str, Any]) -> list[str]:
-    """Return prevalence-bin labels appearing in the released plan.
+    """Return support-bin labels appearing in the released plan.
 
     The verifier treats these labels as public vocabulary.  Longer labels are
-    returned first so that ``very common`` is matched before ``common``.
+    returned first so that ``very high`` is matched before ``high``.
     """
     labels: set[str] = set()
     for atom in plan.get("selected_atoms", []) or []:
-        b = atom.get("prevalence_bin")
+        b = atom.get("support_bin")
         if b is not None:
             labels.add(str(b).strip().lower())
-    labels.update(str(k).strip().lower() for k in (plan.get("prevalence_bins") or {}).keys())
+    labels.update(str(k).strip().lower() for k in (plan.get("support_bins") or {}).keys())
     return sorted((b for b in labels if b), key=len, reverse=True)
 
 
 def _bin_label_in_text(text_norm: str, bin_label: str) -> bool:
-    """Return whether a prevalence-bin label occurs as a standalone phrase."""
+    """Return whether a support-bin label occurs as a standalone phrase."""
     if not bin_label:
         return False
     pattern = r"(?<!\w)" + re.escape(bin_label) + r"(?!\w)"
@@ -233,12 +233,12 @@ def _bin_label_in_text(text_norm: str, bin_label: str) -> bool:
 
 
 def _bin_labels_in_text_nonoverlap(text_norm: str, bin_labels: list[str]) -> list[str]:
-    """Return prevalence-bin labels with longest non-overlapping matching.
+    """Return support-bin labels with longest non-overlapping matching.
 
-    Bin labels can be nested, for example ``common`` occurs inside
-    ``very common``.  For verifier correctness, a sentence containing
-    ``very common`` should not also be interpreted as assigning the bin
-    ``common`` to the same atom.  Labels must therefore be supplied in
+    Bin labels can be nested, for example ``high`` occurs inside
+    ``very high``. For verifier correctness, a sentence containing
+    ``very high`` should not also be interpreted as assigning the bin
+    ``high`` to the same atom.  Labels must therefore be supplied in
     descending length order, as returned by :func:`_plan_bin_labels`.
     """
     matches: list[tuple[int, int, str]] = []
@@ -258,29 +258,35 @@ def _bin_labels_in_text_nonoverlap(text_norm: str, bin_labels: list[str]) -> lis
 
 
 def _allowed_bins_for_atom(atom: dict[str, Any], plan: dict[str, Any]) -> set[str]:
-    """Return prevalence-bin labels allowed for an admitted atom.
+    """Return support-bin labels allowed for an admitted atom.
 
     By default, only the released bin for that atom is allowed.  A deployment may
-    optionally include a public mapping ``allowed_prevalence_bin_coarsenings`` in
+    optionally include a public mapping ``allowed_support_bin_coarsenings`` in
     the plan to authorize coarser labels.  This mapping is part of the released
     plan or public decoding policy and does not access protected data.
     """
-    released = str(atom.get("prevalence_bin", "")).strip().lower()
+    released = str(atom.get("support_bin", "")).strip().lower()
     allowed = {released} if released else set()
-    mapping = plan.get("allowed_prevalence_bin_coarsenings") or {}
+    mapping = plan.get("allowed_support_bin_coarsenings") or {}
     for b in mapping.get(released, []) if isinstance(mapping, dict) else []:
         if str(b).strip():
             allowed.add(str(b).strip().lower())
     return allowed
 
 
-def _detect_prevalence_bin_claims(summary: str, plan: dict[str, Any], all_atoms: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Detect prevalence-bin assignments and validate them against the plan.
+def _detect_support_bin_claims(
+    summary: str,
+    plan: dict[str, Any],
+    all_atoms: list[dict[str, Any]],
+    *,
+    strict_markers: bool = False,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Detect support-bin assignments and validate them against the plan.
 
     The check is syntactic. It considers a sentence to assign a
-    prevalence bin when the sentence mentions an admitted atom and contains a
-    released bin label, excluding comparative phrases such as ``more common
-    than`` and ``less common than`` that are handled by the comparison checker.
+    support bin when the sentence mentions an admitted atom and contains a
+    released bin label. Pairwise semantic-support comparisons are handled by the
+    comparison checker.
     """
     by_id, _, admitted = _plan_maps(plan)
     bin_labels = _plan_bin_labels(plan)
@@ -289,43 +295,88 @@ def _detect_prevalence_bin_claims(summary: str, plan: dict[str, Any], all_atoms:
 
     supported: list[dict[str, Any]] = []
     unsupported: list[dict[str, Any]] = []
-    comparative_re = re.compile(r"\b(?:more|less)\s+common\s+than\b", re.IGNORECASE)
-    superlative_re = re.compile(r"\bmost\s+common\b", re.IGNORECASE)
+    comparison_re = re.compile(r"\b(?:higher|lower)(?: semantic)? support\s+than\b", re.IGNORECASE)
+    superlative_re = re.compile(r"\bhighest(?: semantic)? support\b", re.IGNORECASE)
 
     for sent in _sentence_split(summary):
-        if comparative_re.search(sent) or superlative_re.search(sent):
+        if comparison_re.search(sent) or superlative_re.search(sent):
             continue
+        marker_matches = list(_ATOM_MARKER_RE.finditer(sent))
+        if strict_markers and marker_matches:
+            # In strict audit mode, canonical markers are authoritative.  A bin
+            # is associated only with the marker-local span that follows its
+            # marker, up to the next canonical marker (or the end of the
+            # sentence).  This prevents a sentence containing several
+            # ``[atom:j] label (bin)`` entries from forming the Cartesian
+            # product of every bin with every atom in that sentence.
+            for idx, marker in enumerate(marker_matches):
+                aid = int(marker.group(1))
+                if aid not in admitted:
+                    continue
+                span_end = marker_matches[idx + 1].start() if idx + 1 < len(marker_matches) else len(sent)
+                local_text = sent[marker.end():span_end]
+                present_bins = _bin_labels_in_text_nonoverlap(normalize(local_text), bin_labels)
+                if not present_bins:
+                    continue
+                allowed = _allowed_bins_for_atom(by_id[aid], plan)
+                for b in present_bins:
+                    record = {
+                        "type": "support_bin",
+                        "text": local_text.strip() or sent,
+                        "atom_id": int(aid),
+                        "claimed_bin": b,
+                        "released_bin": by_id[aid].get("support_bin"),
+                    }
+                    if b in allowed:
+                        supported.append(record | {"supported_by_released_bin": True})
+                    else:
+                        unsupported.append(record | {"supported_by_released_bin": False})
+            continue
+
+        # Non-strict fallback for summaries without canonical markers.  This
+        # retains the previous literal-label behavior and should be interpreted
+        # as a heuristic diagnostic rather than the strict audit contract.
         sent_norm = normalize(sent)
         present_bins = _bin_labels_in_text_nonoverlap(sent_norm, bin_labels)
         if not present_bins:
             continue
         ids = _atoms_in_span(sent, all_atoms) & admitted
         if not ids:
-            # A bin word without an admitted atom is not a bin assignment.
             continue
-        for aid in sorted(ids):
-            allowed = _allowed_bins_for_atom(by_id[aid], plan)
-            for b in present_bins:
-                record = {"type": "prevalence_bin", "text": sent, "atom_id": int(aid), "claimed_bin": b, "released_bin": by_id[aid].get("prevalence_bin")}
-                if b in allowed:
-                    supported.append(record | {"supported_by_released_bin": True})
-                else:
-                    unsupported.append(record | {"supported_by_released_bin": False})
+        # Accept only unambiguous fallback assignments.  When a sentence
+        # contains several atoms or several bins, the text does not determine a
+        # unique atom--bin association without canonical markers.
+        if len(ids) != 1 or len(present_bins) != 1:
+            continue
+        aid = next(iter(ids))
+        b = present_bins[0]
+        allowed = _allowed_bins_for_atom(by_id[aid], plan)
+        record = {
+            "type": "support_bin",
+            "text": sent,
+            "atom_id": int(aid),
+            "claimed_bin": b,
+            "released_bin": by_id[aid].get("support_bin"),
+        }
+        if b in allowed:
+            supported.append(record | {"supported_by_released_bin": True})
+        else:
+            unsupported.append(record | {"supported_by_released_bin": False})
     return supported, unsupported
 
 
 def _ordered_pair_supported(kind: str, left_atom: dict[str, Any], right_atom: dict[str, Any], margin: float) -> bool:
     left = float(left_atom.get("noisy_mass", 0.0))
     right = float(right_atom.get("noisy_mass", 0.0))
-    if kind == "more_common_than":
+    if kind == "higher_support_than":
         return left >= right + margin
-    if kind == "less_common_than":
+    if kind == "lower_support_than":
         return left + margin <= right
     return False
 
 
 def _detect_comparisons(summary: str, plan: dict[str, Any], all_atoms: list[dict[str, Any]], margin: float = 0.0) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Detect pairwise and superlative prevalence claims and validate their support."""
+    """Detect pairwise semantic-support comparisons and rank superlatives and validate their support."""
     by_id, _, admitted = _plan_maps(plan)
     supported: list[dict[str, Any]] = []
     unsupported: list[dict[str, Any]] = []
@@ -367,7 +418,7 @@ def _detect_comparisons(summary: str, plan: dict[str, Any], all_atoms: list[dict
 
 def _description_terms(description: str) -> set[str]:
     words = re.findall(r"[a-z][a-z0-9_-]{3,}", normalize(description))
-    stop = {"this", "that", "with", "from", "about", "theme", "themes", "record", "records", "aggregate", "summary", "private", "public", "common", "moderate", "very", "low"}
+    stop = {"this", "that", "with", "from", "about", "theme", "themes", "record", "records", "aggregate", "summary", "private", "public", "high", "moderate", "very", "low"}
     return {w for w in words if w not in stop}
 
 
@@ -416,7 +467,11 @@ def verify_summary(
 
     marker_ids = extract_atom_markers(summary)
     label_ids = extract_atoms_by_label(summary, all_atoms)
-    mentioned = marker_ids | label_ids
+    # Canonical markers are authoritative in strict audit mode. Literal-label
+    # matching is retained separately as a diagnostic because descriptions or
+    # ordinary prose can contain another public atom label without making an
+    # atom-level claim about that label.
+    mentioned = marker_ids if strict_markers else (marker_ids | label_ids)
     unsupported = mentioned - admitted_ids
     uar = len(unsupported) / max(1, len(mentioned))
 
@@ -431,7 +486,12 @@ def verify_summary(
 
     supported_comps, unsupported_comps = _detect_comparisons(summary, plan, all_atoms, margin=comparison_margin)
     ucr = len(unsupported_comps) / max(1, len(supported_comps) + len(unsupported_comps))
-    supported_bins, unsupported_bins = _detect_prevalence_bin_claims(summary, plan, all_atoms)
+    supported_bins, unsupported_bins = _detect_support_bin_claims(
+        summary,
+        plan,
+        all_atoms,
+        strict_markers=bool(strict_markers),
+    )
 
     raw_detail_violations = _detect_raw_detail_violations(summary) if reject_raw_details else []
     unsupported_numbers = _detect_unsupported_numbers(summary, plan) if reject_unsupported_numbers else []
@@ -480,7 +540,7 @@ def verify_summary(
             "unsupported_comparisons": unsupported_comparison_records,
         })
     for bin_claim in unsupported_bins:
-        violations.append({**bin_claim, "type": "unsupported_prevalence_bin"})
+        violations.append({**bin_claim, "type": "unsupported_support_bin"})
     for raw in raw_detail_violations:
         violations.append({"type": "raw_record_or_structured_identifier_pattern", **raw})
     for num in unsupported_numbers:
@@ -490,10 +550,10 @@ def verify_summary(
 
     accept = not violations
     return {
-        "verifier_type": "public_contract_verifier_v4_thresholded",
+        "verifier_type": "public_contract_verifier_v6_marker_local",
         "verifier_scope": (
             "checks plan consistency using canonical atom markers, public atom labels, "
-            "prevalence-bin assignments, simple noisy-mass comparisons, rank superlatives, "
+            "support-bin assignments, semantic-support comparisons, rank superlatives, "
             "numeric claims, explicit unsupported importance-ordering language, and "
             "structured identifier or raw-record patterns; accepts atom/comparison diagnostics "
             "only when UAR <= alpha_atom and UCR <= alpha_comp; does not certify semantic truth, "
@@ -517,9 +577,12 @@ def verify_summary(
         "unsupported_comparisons": unsupported_comps,
         "unsupported_comparison_records": unsupported_comparison_records,
         "comparisons_detected": [c.get("text", c.get("type")) for c in supported_comps + unsupported_comps],
+        "comparison_count": int(len(supported_comps) + len(unsupported_comps)),
+        "supported_comparison_count": int(len(supported_comps)),
+        "unsupported_comparison_count": int(len(unsupported_comps)),
         "UCR": float(ucr),
-        "supported_prevalence_bins": supported_bins,
-        "unsupported_prevalence_bins": unsupported_bins,
+        "supported_support_bins": supported_bins,
+        "unsupported_support_bins": unsupported_bins,
         "raw_detail_violations": raw_detail_violations,
         "unsupported_numeric_claims": unsupported_numbers,
         "unsupported_importance_claims": unsupported_importance_claims,

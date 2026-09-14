@@ -12,7 +12,7 @@ adjacency: adddrop
 n_records: 800
 record_selection: hash
 
-# Public denominator used to convert released noisy masses to prevalence values.
+# Public denominator used to convert released noisy masses to normalized semantic-support values.
 public_denominator: 800
 auto_public_denominator_from_n_records: true
 
@@ -32,9 +32,9 @@ seed: 0
 # The template decoder verbalizes only the released semantic plan.
 decoder_backend: template
 
-# Prevalence-bin thresholds, expressed as fractions of public_denominator.
-prevalence_bins:
-  very common: 0.20
-  common: 0.10
+# Support-bin thresholds, expressed as fractions of public_denominator.
+support_bins:
+  very high: 0.20
+  high: 0.10
   moderate: 0.05
   low: 0.0

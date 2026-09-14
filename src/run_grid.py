@@ -101,12 +101,12 @@ def main() -> None:
     p.add_argument('--embedding-fit-selection', choices=['hash','random','first'], default=None, help='Selection rule for bounded public/auxiliary vectorizer fitting.')
     p.add_argument('--embedding-fit-seed', type=int, default=None, help='Seed for bounded public/auxiliary vectorizer fitting.')
     p.add_argument('--output-dir', default=None, help='Override output_dir from the config.')
-    p.add_argument('--summary-embedding-backend', default=None, choices=['tfidf','auto','sentence_transformer'], help='Text-level evaluation embedding backend.')
-    p.add_argument('--summary-comparative-eval-backend', default=None, choices=['none','heuristic','openai'], help='Optional DP-summary vs non-private-reference-summary evaluator.')
-    p.add_argument('--decoder-backend', default=None, choices=['template','openai'], help='Override decoder backend for generated DP summaries.')
+    p.add_argument('--summary-embedding-backend', default=None, choices=['none','tfidf','auto','sentence_transformer'], help='Optional text-level evaluation embedding backend.')
+    p.add_argument('--summary-comparative-eval-backend', default=None, choices=['none','heuristic','openai','hf_local'], help='Optional DP-summary vs non-private-reference-summary evaluator.')
+    p.add_argument('--decoder-backend', default=None, choices=['template','openai','hf_local'], help='Override decoder backend for generated DP summaries.')
     p.add_argument('--decoder-model', default=None, help='Override decoder model for LLM backends.')
     p.add_argument('--decoder-temperature', default=None, type=float, help='Override decoder temperature.')
-    p.add_argument('--clean-reference-decoder-backend', default=None, choices=['template','openai'], help='Override decoder backend for non-private-reference summaries used in offline evaluation.')
+    p.add_argument('--clean-reference-decoder-backend', default=None, choices=['template','openai','hf_local'], help='Override decoder backend for non-private-reference summaries used in offline evaluation.')
     p.add_argument('--clean-reference-decoder-model', default=None, help='Override non-private-reference decoder model.')
     p.add_argument('--skip-existing', action='store_true', help='Resume a grid by skipping runs whose key output artifacts already exist.')
     args = p.parse_args()
@@ -179,7 +179,7 @@ def main() -> None:
             if n is not None:
                 cfg['n_records'] = n
                 # In these experiments the number of target records used is a public
-                # protocol parameter. Keep prevalence denominators synchronized with
+                # protocol parameter. Keep semantic-support denominators synchronized with
                 # the n_records grid unless the config explicitly disables it.
                 if cfg.get('auto_public_denominator_from_n_records', True):
                     cfg['public_denominator'] = int(n)

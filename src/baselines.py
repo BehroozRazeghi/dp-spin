@@ -192,7 +192,7 @@ def non_private_clustering_summary(
                 "label": label,
                 "description": f"Non-private cluster with {len(idx)} records.",
                 "noisy_mass": float(len(idx)),
-                "prevalence_bin": None,
+                "support_bin": None,
             }
         )
     plan = {
@@ -307,28 +307,37 @@ def dp_keyword_histogram(
     L: int = 10,
     backend: str = "template",
     model: str = "gpt-4o-mini",
+    max_keywords_per_record: int = 1,
+    weighted_topK: bool = False,
 ) -> tuple[dict, str]:
     """Release a noisy histogram over a fixed public keyword vocabulary.
 
-    To keep l1 sensitivity equal to one under add/drop adjacency, each record
-    contributes to at most one keyword bin: the public keyword with the largest
-    occurrence count in that record, with deterministic public tie-breaking.
+    Every record has total l1 contribution at most one. With
+    ``max_keywords_per_record=1`` this is the historical one-best-keyword
+    baseline. With ``weighted_topK=True``, occurrence counts over the top-K
+    matching public keywords are normalized to sum to one, matching DP-SPIN's
+    bounded sparse contribution expressivity more closely.
     """
     rng = np.random.default_rng() if rng is None else rng
     vocabulary = [_clean_string(v).lower() for v in vocabulary if _clean_string(v)]
     counts = np.zeros(len(vocabulary), dtype=float)
 
+    if max_keywords_per_record < 1:
+        raise ValueError("max_keywords_per_record must be at least 1")
     for r in records:
         txt = text_field(r).lower()
-        best_j = None
-        best_count = 0
-        for j, kw in enumerate(vocabulary):
-            c = _keyword_count(txt, kw)
-            if c > best_count:
-                best_j = j
-                best_count = c
-        if best_j is not None:
-            counts[best_j] += 1.0
+        occurrence = np.asarray([_keyword_count(txt, kw) for kw in vocabulary], dtype=float)
+        positive = np.flatnonzero(occurrence > 0)
+        if positive.size == 0:
+            continue
+        order = positive[np.lexsort((positive, -occurrence[positive]))]
+        chosen = order[: min(int(max_keywords_per_record), order.size)]
+        if weighted_topK and chosen.size > 1:
+            weights = occurrence[chosen] / float(occurrence[chosen].sum())
+        else:
+            weights = np.zeros(chosen.size, dtype=float)
+            weights[0] = 1.0
+        counts[chosen] += weights
 
     sens = sensitivity(adjacency)
     noisy, info = laplace_release(counts, epsilon=epsilon, l1_sensitivity=sens["l1"], rng=rng)
@@ -336,7 +345,12 @@ def dp_keyword_histogram(
         {
             "adjacency": adjacency,
             "histogram_universe": "fixed_public_keywords",
-            "per_record_contribution": "one_best_matching_keyword",
+            "per_record_contribution": (
+                "weighted_topK_public_keywords_l1_at_most_one" if weighted_topK
+                else "one_best_matching_keyword"
+            ),
+            "max_keywords_per_record": int(max_keywords_per_record),
+            "weighted_topK": bool(weighted_topK),
         }
     )
     idx = topL(noisy, min(int(L), len(vocabulary)))
@@ -349,7 +363,7 @@ def dp_keyword_histogram(
                 "label": vocabulary[int(j)],
                 "description": "DP keyword count over a fixed public vocabulary.",
                 "noisy_mass": float(max(0.0, noisy[int(j)])),
-                "prevalence_bin": None,
+                "support_bin": None,
             }
             for j in idx
         ],
@@ -410,7 +424,7 @@ def dp_category_histogram(
                 "label": cats[int(j)],
                 "description": f"DP category count for public category field {category_key}.",
                 "noisy_mass": float(max(0.0, noisy[int(j)])),
-                "prevalence_bin": None,
+                "support_bin": None,
             }
             for j in idx
         ],
@@ -436,6 +450,8 @@ def run_baselines(
     category_universe_json: str | None = None,
     max_keywords: int = 200,
     baseline_methods: Iterable[str] | None = None,
+    keyword_max_per_record: int = 1,
+    keyword_weighted_topK: bool = False,
 ) -> None:
     """Generate the requested baseline artifacts in one output directory.
     
@@ -474,6 +490,8 @@ def run_baselines(
             L=10,
             backend=backend,
             model=model,
+            max_keywords_per_record=keyword_max_per_record,
+            weighted_topK=keyword_weighted_topK,
         )
         write_json(plan, outdir / "dp_keyword_plan.json")
         (outdir / "dp_keyword_summary.txt").write_text(summary, encoding="utf-8")
@@ -515,6 +533,8 @@ def run_baselines(
         "category_universe_json": category_universe_json,
         "max_keywords": max_keywords,
         "baseline_methods": sorted(methods),
+        "keyword_max_per_record": int(keyword_max_per_record),
+        "keyword_weighted_topK": bool(keyword_weighted_topK),
         "privacy_note": (
             "raw, redacted, and clustering baselines are non-private; DP keyword "
             "and category histograms are private only with respect to their fixed "
@@ -533,7 +553,7 @@ def main() -> None:
     p.add_argument("--output-dir", required=True)
     p.add_argument("--epsilon", type=float, default=1.0)
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--backend", choices=["template", "openai"], default="template")
+    p.add_argument("--backend", choices=["template", "openai", "hf_local"], default="template")
     p.add_argument("--model", default="gpt-4o-mini")
     p.add_argument("--category-key", default=None)
     p.add_argument("--category-universe-records", default=None, help="Public/auxiliary JSONL used only to define the category label universe.")
@@ -541,6 +561,8 @@ def main() -> None:
     p.add_argument("--max-keywords", type=int, default=200)
     p.add_argument("--methods", nargs="+", choices=list(BASELINE_METHOD_CHOICES), default=None, help="Baselines to generate. Default: all baselines.")
     p.add_argument("--adjacency", choices=["adddrop", "replacement"], default="adddrop")
+    p.add_argument("--keyword-max-per-record", type=int, default=1)
+    p.add_argument("--keyword-weighted-topK", action="store_true")
     args = p.parse_args()
     run_baselines(
         args.records,
@@ -556,6 +578,8 @@ def main() -> None:
         args.category_universe_json,
         args.max_keywords,
         args.methods,
+        args.keyword_max_per_record,
+        args.keyword_weighted_topK,
     )
 
 

@@ -95,12 +95,8 @@ METRIC_COLS = [
     "sketch_overlap_at_L",
     "sketch_mass_retained_fraction",
     "sketch_support_mass_loss",
-    "verifier_UAR",
-    "verifier_UCR",
-    "verifier_accept",
     "text_token_jaccard",
     "text_keyphrase_jaccard",
-    "summary_embedding_cosine",
     "comparative_dp_preferred",
     "probe_summary_mention_rate",
     "probe_plan_plan_admission_rate",
@@ -391,10 +387,6 @@ def make_compact_table(summary: pd.DataFrame) -> pd.DataFrame:
         "sketch_mass_retained_fraction",
         "sketch_support_mass_loss",
         "text_keyphrase_jaccard",
-        "summary_embedding_cosine",
-        "verifier_UAR",
-        "verifier_UCR",
-        "verifier_accept",
         "probe_plan_plan_admission_rate",
         "probe_summary_mention_rate",
         "num_seeds",
@@ -488,14 +480,10 @@ def _dataset_asset_columns(df: pd.DataFrame, protected_unit: str) -> list[str]:
         "probe_support",
         "probe_plan_plan_admission_rate_mean",
         "probe_summary_mention_rate_mean",
-        "verifier_accept_rate",
-        "UAR_mean",
-        "UCR_mean",
         "text_keyphrase_jaccard_mean",
         "text_token_jaccard_mean",
         "text_bigram_jaccard_mean",
         "text_tfidf_cosine_mean",
-        "summary_embedding_cosine_mean",
         "comparative_dp_preferred_mean",
     ]
     if protected_unit == "record":
@@ -605,8 +593,6 @@ def _dataset_representative_columns(df: pd.DataFrame, protected_unit: str) -> li
         "probe_plan_plan_admission_rate_mean",
         "probe_summary_mention_rate_mean",
         "text_keyphrase_jaccard_mean",
-        "summary_embedding_cosine_mean",
-        "verifier_accept_rate",
     ]
     if protected_unit == "record":
         cols = [c for c in cols if c not in {"n_users", "user_contribution_bound"}]
@@ -937,11 +923,8 @@ def _metric_specs_grouped(df: pd.DataFrame) -> list[tuple[str, str, bool]]:
         ("overlap_at_L_mean", r"$\mathsf{Overlap}@L$", True),
         ("mass_retained_fraction_mean", "$\\mathsf{MassRetained}$", True),
         ("support_mass_loss_mean", "$\\mathsf{{Loss}}_L$", False),
-        ("verifier_accept_rate", "$\\mathsf{AcceptRate}$", True),
-        ("UAR_mean", "$\\mathsf{UAR}$", True),
-        ("UCR_mean", "$\\mathsf{UCR}$", True),
         ("text_keyphrase_jaccard_mean", "$J_{\\mathrm{kp}}$", True),
-        ("summary_embedding_cosine_mean", "$\\mathsf{Cos}_{\\mathrm{emb}}$", True),
+        ("text_tfidf_cosine_mean", "$\\mathsf{Cos}_{\\mathrm{tfidf}}$", True),
     ]
     return [(m, y, frac) for m, y, frac in specs if m in df.columns and df[m].notna().any()]
 
@@ -990,6 +973,7 @@ def _safe_metric_stem(metric: str) -> str:
         "UAR": "unsupported_atom_rate",
         "UCR": "unsupported_comparison_rate",
         "text_keyphrase_jaccard": "text_keyphrase_jaccard",
+        "text_tfidf_cosine": "text_tfidf_cosine",
         "summary_embedding_cosine": "summary_embedding_cosine",
     }
     return replacements.get(stem, _safe_file_stem(stem))
@@ -1363,6 +1347,19 @@ def _remove_legacy_dataset_plots(plots: Path, protected_unit: str) -> None:
         path = plots / name
         if path.exists():
             path.unlink()
+    # Template-decoder verifier sweeps are implementation checks rather than
+    # mechanism-utility curves, and the TF-IDF-backed summary embedding metric
+    # duplicates the separately reported TF-IDF cosine. Remove any stale files
+    # from earlier report generations so they are not recollected accidentally.
+    for pattern in [
+        f"{protected_unit}_verifier_accept*",
+        f"{protected_unit}_unsupported_atom_rate*",
+        f"{protected_unit}_unsupported_comparison_rate*",
+        f"{protected_unit}_summary_embedding_cosine*",
+    ]:
+        for path in plots.glob(pattern):
+            if path.is_file():
+                path.unlink()
 
 
 

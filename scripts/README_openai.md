@@ -10,7 +10,7 @@ For DP-SPIN verbalization, the OpenAI decoder receives only:
 
 - the released differentially private semantic plan;
 - public labels and descriptions for admitted atoms;
-- released noisy masses, released ranks, or prevalence bins contained in or computed publicly from the released plan; and
+- released noisy masses, released ranks, or support bins contained in or computed publicly from the released plan; and
 - public decoder instructions.
 
 It does not receive:
@@ -300,7 +300,7 @@ The first three are non-private references. The default two are differentially p
 | `DPSPIN_JUDGE_BACKEND` | `none` | Legacy DP-SPIN-only plan-conditioned judge: `none`, `heuristic`, or `openai` |
 | `GENERIC_JUDGE_BACKEND` | `openai` | Release-conditioned cross-method judge: `none`, `heuristic`, or `openai` |
 | `COMPARATIVE_BACKEND` | `none` | Optional DP-summary/non-private-reference comparison: `none`, `heuristic`, or `openai` |
-| `SUMMARY_EMBEDDING_BACKEND` | `tfidf` | `tfidf`, `auto`, or `sentence_transformer` |
+| `SUMMARY_EMBEDDING_BACKEND` | `none` | `none`, `tfidf`, `auto`, or `sentence_transformer` |
 | `JUDGE_METHODS` | empty | Empty uses the union of comparison and qualitative methods |
 | `COMPARISON_METHODS` | four default methods | Pipe-delimited methods included in the comparison table |
 | `COMPARISON_DPSPIN_MECHANISM` | `gaussian` | DP-SPIN mechanism used in the cross-method comparison |
@@ -380,7 +380,7 @@ Controls:
 | `L_VALUE` | `10` | Released-plan-size filter |
 | `JUDGE_BACKEND` | `none` | Optional legacy plan-conditioned judge |
 | `COMPARATIVE_BACKEND` | `none` | Optional summary-reference comparison backend |
-| `SUMMARY_EMBEDDING_BACKEND` | `tfidf` | Text-similarity backend |
+| `SUMMARY_EMBEDDING_BACKEND` | `none` | Optional embedding-similarity backend |
 | `FORCE_REDECODE` | `0` | Regenerate existing decoded outputs |
 | `MAX_RUNS_PER_DATASET` | empty | Optional selected-run cap |
 | `OUTPUT_DIR` | empty | Empty uses dataset-specific defaults |

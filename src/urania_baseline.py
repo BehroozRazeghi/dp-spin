@@ -583,9 +583,10 @@ def run_urania_public_keyword_baseline(
     #
     # Runtime cap for keyword-histogram construction. Set to None to use
     # all records assigned to each cluster; the CLI also treats values <= 0 as no cap.
-    sample_per_cluster: int | None = 50,
+    sample_per_cluster: int | None = None,
     extra_public_keywords: list[str] | None = None,
     cluster_size_threshold: float | None = None,
+    public_n_records: int | None = None,
     svd_dim: int = 64,
     dp_iterations: int = 3,
     seed: int = 0,
@@ -599,11 +600,11 @@ def run_urania_public_keyword_baseline(
     keyword_selector: KeywordSelector = "lexical",
     histogram_mechanism: Literal["discrete_laplace", "continuous_laplace"] = "discrete_laplace",
 ) -> None:
-    """Run the URANIA-style DP clustered public-keyword comparison.
-    
-    The default configuration implements the matched public-vocabulary protocol used
-    in this repository. Report it as a URANIA-style baseline rather than an exact
-    reproduction of the original experiments.
+    """Run a DP clustered public-keyword baseline inspired by URANIA.
+
+    This is not an exact reproduction. The default uses all assigned records, a
+    fixed public vocabulary, and a public cluster-size threshold. Any optional
+    post-cluster cap is conservatively assigned double histogram sensitivity.
     """
     rng = np.random.default_rng(seed)
     outdir = ensure_dir(output_dir)
@@ -634,8 +635,15 @@ def run_urania_public_keyword_baseline(
         true_sizes, epsilon=budget.epsilon_size, max_bins_per_record=1, rng=rng,
         mechanism=histogram_mechanism,
     )
+    if public_n_records is None and n_records is not None:
+        public_n_records = int(n_records)
     if cluster_size_threshold is None:
-        cluster_size_threshold = max(10.0, 0.25 * len(records) / max(1, k))
+        if public_n_records is None:
+            raise ValueError(
+                "cluster_size_threshold or public_n_records is required; deriving the threshold "
+                "from the realized protected sample size can release a private statistic under add/drop adjacency"
+            )
+        cluster_size_threshold = max(10.0, 0.25 * int(public_n_records) / max(1, k))
 
     keyword_counts = np.zeros((k, len(vocabulary)), dtype=float)
     per_record_keyword_counts: list[int] = []
@@ -648,7 +656,15 @@ def run_urania_public_keyword_baseline(
         if sample_per_cluster is None or sample_per_cluster <= 0 or len(cluster_indices) <= sample_per_cluster:
             sampled = cluster_indices
         else:
-            sampled = np.sort(rng.choice(cluster_indices, size=int(sample_per_cluster), replace=False))
+            # Deterministic public-hash truncation after data-dependent cluster
+            # assignment. One adjacent record can enter and displace one existing
+            # record, so the histogram sensitivity is conservatively doubled.
+            scored = []
+            for idx in cluster_indices:
+                key = str(records[int(idx)].get("id", records[int(idx)].get("record_id", int(idx))))
+                digest = __import__("hashlib").sha256(f"{seed}:{c}:{key}".encode()).hexdigest()
+                scored.append((digest, int(idx)))
+            sampled = np.asarray(sorted(i for _, i in sorted(scored)[: int(sample_per_cluster)]), dtype=int)
         sampled_record_ids_by_cluster[int(c)] = [int(i) for i in sampled]
         for i in sampled:
             kw_idx = _record_keyword_indices(
@@ -659,10 +675,19 @@ def run_urania_public_keyword_baseline(
             for j in kw_idx:
                 keyword_counts[c, j] += 1.0
 
+    cap_active = bool(sample_per_cluster is not None and sample_per_cluster > 0)
+    histogram_sensitivity_multiplier = 2 if cap_active else 1
     noisy_kw_flat, hist_info = private_histogram_release(
         keyword_counts.reshape(-1), epsilon=budget.epsilon_hist,
-        max_bins_per_record=int(max_keywords_per_record), rng=rng,
+        max_bins_per_record=int(max_keywords_per_record) * histogram_sensitivity_multiplier, rng=rng,
         mechanism=histogram_mechanism,
+    )
+    hist_info["postcluster_cap_active"] = cap_active
+    hist_info["postcluster_cap_sensitivity_multiplier"] = histogram_sensitivity_multiplier
+    hist_info["cap_accounting_note"] = (
+        "A deterministic post-cluster cap may replace one previously retained record under add/drop adjacency; "
+        "the histogram sensitivity is therefore conservatively doubled." if cap_active else
+        "All assigned records are used; no post-cluster truncation sensitivity adjustment is needed."
     )
     noisy_kw = noisy_kw_flat.reshape(k, len(vocabulary))
 
@@ -705,9 +730,9 @@ def run_urania_public_keyword_baseline(
     released_cluster_object_text = _render_released_cluster_object(clusters)
 
     plan = {
-        "baseline": "restricted_urania_style_public_keyword",
+        "baseline": "dp_clustered_public_keyword_inspired_by_urania",
         "description": (
-            "URANIA-style public-keyword DP baseline: DP clustering, DP cluster-size thresholding, "
+            "DP clustered public-keyword baseline inspired by URANIA: DP clustering, DP cluster-size thresholding, "
             "per-cluster DP keyword histograms over a fixed public keyword vocabulary, and "
             "summary generation from released keywords only."
         ),
@@ -717,10 +742,10 @@ def run_urania_public_keyword_baseline(
                 "rank": i + 1,
                 "atom_id": int(c["cluster_id"]),
                 "index": int(c["cluster_id"]),
-                "label": f"URANIA-style cluster {c['cluster_id']}: " + ", ".join(c.get("keywords", [])[:5]),
+                "label": f"DP clustered-keyword atom {c['cluster_id']}: " + ", ".join(c.get("keywords", [])[:5]),
                 "description": "Released DP keyword cluster over a fixed public vocabulary.",
                 "noisy_mass": float(c["noisy_size"]),
-                "prevalence_bin": None,
+                "support_bin": None,
             }
             for i, c in enumerate(clusters)
         ],
@@ -740,8 +765,10 @@ def run_urania_public_keyword_baseline(
             "max_keywords": int(max_keywords),
             "max_keywords_per_record": int(max_keywords_per_record),
             "sample_per_cluster": None if sample_per_cluster is None else int(sample_per_cluster),
+            "postcluster_cap_sensitivity_multiplier": int(histogram_sensitivity_multiplier),
             "extra_public_keywords": list(extra_public_keywords or []),
             "cluster_size_threshold": float(cluster_size_threshold),
+            "public_n_records": None if public_n_records is None else int(public_n_records),
             "svd_dim": int(svd_dim),
             "dp_iterations": int(dp_iterations),
             "seed": int(seed),
@@ -758,13 +785,13 @@ def run_urania_public_keyword_baseline(
             "keyword_histogram_release": hist_info,
         },
         "scope_note": (
-            "This baseline matches URANIA's mechanism structure but uses repository-local clustering and keyword selection. "
+            "This baseline is inspired by URANIA's mechanism structure but uses repository-local clustering and keyword selection. "
             "For fair comparison with DP-SPIN, the default uses a fixed public vocabulary and public/auxiliary representation."
         ),
     }
 
     metrics = {
-        "baseline": "restricted_urania_style_public_keyword",
+        "baseline": "dp_clustered_public_keyword_inspired_by_urania",
         "num_records": int(len(records)),
         "num_public_keywords": int(len(vocabulary)),
         "num_clusters_requested": int(num_clusters),
@@ -798,7 +825,7 @@ def run_urania_public_keyword_baseline(
     (outdir / "urania_cluster_public_keyword_prompt.txt").write_text(
         "Cluster summaries generated from released public keywords; released noisy sizes are used for retention and ordering, but are not repeated in the paper-facing summary.", encoding="utf-8"
     )
-    print(f"Wrote URANIA-style public-keyword baseline to {outdir}")
+    print(f"Wrote DP clustered public-keyword baseline inspired by URANIA to {outdir}")
 
 
 def main() -> None:
@@ -816,15 +843,16 @@ def main() -> None:
     p.add_argument("--keywords-per-summary", type=int, default=10)
     p.add_argument("--max-keywords", type=int, default=200)
     p.add_argument("--max-keywords-per-record", type=int, default=5)
-    p.add_argument("--sample-per-cluster", type=int, default=50,
+    p.add_argument("--sample-per-cluster", type=int, default=0,
                    help="Runtime cap on records used per cluster for keyword histograms; use 0 or a negative value to include all assigned records.")
     p.add_argument("--extra-public-keyword", action="append", default=[], help="Additional public keyword to append to the fixed keyword universe. Repeatable.")
     p.add_argument("--extra-public-keywords-file", default=None, help="Optional text file with one additional public keyword per line.")
     p.add_argument("--cluster-size-threshold", type=float, default=None)
+    p.add_argument("--public-n-records", type=int, default=None)
     p.add_argument("--svd-dim", type=int, default=64)
     p.add_argument("--dp-iterations", type=int, default=3)
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--backend", choices=["template", "openai"], default="template")
+    p.add_argument("--backend", choices=["template", "openai", "hf_local"], default="template")
     p.add_argument("--model", default="gpt-4o-mini")
     p.add_argument("--n-records", type=int, default=None)
     p.add_argument("--embedding-mode", choices=["public_tfidf_svd", "target_tfidf_svd"], default="public_tfidf_svd")
@@ -853,6 +881,7 @@ def main() -> None:
         sample_per_cluster=None if args.sample_per_cluster <= 0 else args.sample_per_cluster,
         extra_public_keywords=extra_keywords,
         cluster_size_threshold=args.cluster_size_threshold,
+        public_n_records=args.public_n_records,
         svd_dim=args.svd_dim,
         dp_iterations=args.dp_iterations,
         seed=args.seed,

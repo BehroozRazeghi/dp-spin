@@ -14,7 +14,7 @@ DP-SPIN (differentially private semantic plans for insight narration) implements
 The implementation follows the three stages defined in the manuscript.
 
 1. **Bounded semantic assignment.** A semantic contribution map assigns each protected record `x_i` a nonnegative vector `v_i` over the public atom universe. Each vector satisfies `||v_i||_0 <= K` and `||v_i||_1 <= 1`. For user-level experiments, all record-level vectors associated with one user are aggregated and deterministically clipped to the configured `l1` contribution bound `B`.
-2. **Differentially private semantic-plan release.** The curator aggregates the bounded contributions into the internal semantic sketch `C(D)` and releases a differentially private semantic plan containing an admitted atom set and released noisy masses. Prevalence values and prevalence bins are computed from the released noisy masses and a public denominator by post-processing.
+2. **Differentially private semantic-plan release.** The curator aggregates the bounded contributions into the internal semantic sketch `C(D)` and releases a differentially private semantic plan containing an admitted atom set and released noisy masses. Normalized semantic-support values and support bins are computed from the released noisy masses and a public denominator by post-processing.
 3. **Contract-constrained verbalization.** The decoder receives only the released semantic plan and public decoding instructions. A public verifier checks whether the generated audit summary satisfies the decoder contract. Rejection, verifier feedback, regeneration, and deterministic fallback generation use the same released plan and are post-processing.
 
 In the repository protocol, the candidate atom universe, decoder-visible atom labels and descriptions, and fitted parameters of the text representation used by the contribution map are fixed independently of the protected target split. Any decoder-visible element constructed from protected target records requires a separate differentially private release whose privacy cost is included in the final accounting. The decoder policy and verifier rules are public and data-independent.
@@ -37,7 +37,7 @@ The decoder and verifier may receive only:
 
 - the released differentially private semantic plan;
 - public labels and descriptions for the admitted atoms;
-- released noisy masses, released ranks, or prevalence bins obtained by public post-processing; and
+- released noisy masses, released ranks, or support bins obtained by public post-processing; and
 - public decoder instructions and verifier rules.
 
 They must not receive:
@@ -89,10 +89,11 @@ src/probe_sweep.py          Controlled probe-atom experiments
 src/baselines.py            Non-private references and DP histogram baselines
 src/urania_baseline.py      URANIA-style public-keyword baseline
 src/report.py               Dataset-level tables and figures
+src/reverify_runs.py        Post-hoc re-verification of saved audit summaries
 src/paper_assets.py         Manuscript table and figure collection
 ```
 
-Configuration fields and dataset protocols are documented in [`configs/README.md`](configs/README.md). OpenAI-based verbalization and release-conditioned evaluation are documented in [`scripts/README_openai_scripts.md`](scripts/README_openai_scripts.md).
+Configuration fields and dataset protocols are documented in [`configs/README.md`](configs/README.md). OpenAI-based verbalization and release-conditioned evaluation are documented in [`scripts/README_openai.md`](scripts/README_openai.md).
 
 ## Requirements
 
@@ -109,7 +110,6 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-The CFPB shell workflow checks for `jinja2`, which is not currently listed in `requirements.txt`:
 
 ```bash
 python -m pip install jinja2
@@ -273,7 +273,7 @@ The primary utility object is the released semantic plan. The main plan-level me
 
 The public verifier reports decoder-contract measures, including unsupported-atom rate, unsupported-comparison rate, and verifier acceptance. Controlled probe experiments report plan admission and summary mention measures.
 
-Text-level similarity to a non-private-plan reference summary is secondary to plan-level utility. The default text representation is TF-IDF. Sentence-transformer similarity and OpenAI-based comparative evaluation are optional.
+Text-level similarity to a non-private-plan reference summary is secondary to plan-level utility. The paper grids report lexical measures, including TF-IDF cosine, and disable the redundant summary-embedding metric by default. Sentence-transformer similarity and OpenAI-based comparative evaluation remain optional.
 
 ## References and baselines
 
@@ -303,7 +303,7 @@ Regenerate Amazon and Yelp reports from saved runs:
 bash scripts/refresh_review_report_assets.sh
 ```
 
-These commands read existing run artifacts and do not rerun the differentially private mechanisms. OpenAI output generation and report-only reconstruction are documented in [`scripts/README_openai_scripts.md`](scripts/README_openai_scripts.md).
+These commands read existing run artifacts and do not rerun the differentially private mechanisms. OpenAI output generation and report-only reconstruction are documented in [`scripts/README_openai.md`](scripts/README_openai.md).
 
 ## Reproducibility
 
@@ -343,13 +343,14 @@ Differential privacy bounds the influence of one protected unit. It does not pre
 ```bibtex
 @article{razeghi2026dpspin,
   title   = {Differentially Private Semantic Plans for Aggregate Insight Generation},
-  author  = {Razeghi, Behrooz and Calmon, Flavio P.},
-  journal = {arXiv preprint arXiv:XXXX.XXXXX},
-  year    = {2026},
-  url     = {https://arxiv.org/abs/XXXX.XXXXX}
+  author  = {Razeghi, Behrooz},
+  journal = {arXiv preprint},
+  year    = {2026}
 }
 ```
 
 ## License
 
 The code and documentation in this repository are released under the [MIT License](LICENSE). Dataset files are not distributed with the repository and remain subject to their original licenses and terms of use.
+
+

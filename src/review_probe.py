@@ -203,9 +203,9 @@ def _base_cfg(
         "probe_support": int(support),
         "probe_base_records": int(probe_base_records),
         "probe_generated_records": int(probe_generated_records),
-        "prevalence_bins": {
-            "very common": 0.20,
-            "common": 0.10,
+        "support_bins": {
+            "very high": 0.20,
+            "high": 0.10,
             "moderate": 0.05,
             "low": 0.0,
         },

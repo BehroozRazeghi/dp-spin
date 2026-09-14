@@ -21,6 +21,7 @@ import numpy as np
 
 Adjacency = Literal["adddrop", "replacement"]
 GaussianCalibration = Literal["analytic", "classical"]
+SelectionAllocation = Literal["uniform", "front_loaded", "theory_optimal"]
 
 MECHANISM_LABELS = {
     "gaussian": r"Gaussian sketch + Top-$L$ atoms",
@@ -101,6 +102,49 @@ def _gaussian_delta(epsilon: float, mu: float) -> float:
     val = _phi(a) - exp_eps * _phi(b)
     # Numerical roundoff can produce tiny negative values near zero.
     return float(max(0.0, min(1.0, val)))
+
+
+def gaussian_delta_for_sigma(
+    epsilon: float,
+    sigma: float,
+    l2_sensitivity: float = 1.0,
+) -> float:
+    """Return the exact Gaussian hockey-stick divergence at ``epsilon``.
+
+    This helper is used both by calibration and by numerical regression tests.
+    A returned value at most the target ``delta`` verifies the requested
+    ``(epsilon, delta)`` guarantee for the supplied sensitivity.
+    """
+    _validate_privacy(epsilon)
+    if sigma < 0 or not np.isfinite(sigma):
+        raise ValueError("sigma must be nonnegative and finite")
+    if l2_sensitivity < 0 or not np.isfinite(l2_sensitivity):
+        raise ValueError("l2_sensitivity must be nonnegative and finite")
+    if l2_sensitivity == 0:
+        return 0.0
+    if sigma == 0:
+        return 1.0
+    return _gaussian_delta(float(epsilon), float(l2_sensitivity) / float(sigma))
+
+
+def verify_gaussian_calibration(
+    epsilon: float,
+    delta: float,
+    sigma: float,
+    l2_sensitivity: float = 1.0,
+    atol: float = 1e-12,
+) -> dict[str, float | bool]:
+    """Numerically verify an analytic Gaussian calibration."""
+    _validate_privacy(epsilon, delta)
+    achieved = gaussian_delta_for_sigma(epsilon, sigma, l2_sensitivity)
+    return {
+        "epsilon": float(epsilon),
+        "target_delta": float(delta),
+        "achieved_delta": float(achieved),
+        "sigma": float(sigma),
+        "l2_sensitivity": float(l2_sensitivity),
+        "valid": bool(achieved <= float(delta) + float(atol)),
+    }
 
 
 def analytic_gaussian_sigma(epsilon: float, delta: float, l2_sensitivity: float = 1.0) -> float:
@@ -266,12 +310,102 @@ def topL(values: np.ndarray, L: int) -> np.ndarray:
     return finite_idx[order[:L_eff]].astype(int)
 
 
+def selection_epsilon_schedule(
+    L: int,
+    epsilon: float,
+    m: int,
+    allocation: SelectionAllocation = "uniform",
+    beta: float = 0.05,
+) -> np.ndarray:
+    """Allocate sequential-selection privacy budget across rounds.
+
+    ``theory_optimal`` minimizes the standard union-bound regret surrogate
+    ``sum_t a_t / epsilon_t`` subject to ``sum_t epsilon_t = epsilon``, where
+    ``a_t = log(m-t+1) + log(L/beta)``.  The solution has
+    ``epsilon_t`` proportional to ``sqrt(a_t)``.
+    """
+    _validate_privacy(epsilon)
+    if L < 0 or m < 0:
+        raise ValueError("L and m must be nonnegative")
+    if not (0 < beta < 1):
+        raise ValueError("beta must be in (0, 1)")
+    L_eff = min(int(L), int(m))
+    if L_eff == 0:
+        return np.zeros(0, dtype=float)
+    if allocation == "uniform":
+        weights = np.ones(L_eff, dtype=float)
+    elif allocation == "front_loaded":
+        weights = np.arange(L_eff, 0, -1, dtype=float)
+    elif allocation == "theory_optimal":
+        a = np.asarray(
+            [math.log(max(1, m - t)) + math.log(L_eff / beta) for t in range(L_eff)],
+            dtype=float,
+        )
+        weights = np.sqrt(np.maximum(a, np.finfo(float).tiny))
+    else:
+        raise ValueError("allocation must be 'uniform', 'front_loaded', or 'theory_optimal'")
+    return float(epsilon) * weights / float(weights.sum())
+
+
+def sequential_em_utility_bound(
+    m: int,
+    L: int,
+    epsilon: float,
+    utility_sensitivity: float = 1.0,
+    beta: float = 0.05,
+    allocation: SelectionAllocation = "uniform",
+) -> dict:
+    """High-probability utility certificate for sequential EM admission.
+
+    With probability at least ``1-beta``, each selected score is within
+    ``alpha_t`` of the best remaining score.  Consequently the selected-set
+    score has cumulative regret at most ``sum_t alpha_t`` relative to the
+    non-private top-L score.  A top-L boundary gap larger than
+    ``max_t alpha_t`` is a simple sufficient condition for exact recovery.
+    """
+    if utility_sensitivity <= 0 or not np.isfinite(utility_sensitivity):
+        raise ValueError("utility_sensitivity must be positive and finite")
+    eps_schedule = selection_epsilon_schedule(L, epsilon, m, allocation, beta)
+    L_eff = int(eps_schedule.size)
+    if L_eff == 0:
+        return {
+            "beta": float(beta),
+            "allocation": allocation,
+            "epsilon_schedule": [],
+            "alpha_t": [],
+            "cumulative_regret_bound": 0.0,
+            "exact_recovery_gap_sufficient": 0.0,
+        }
+    alpha = []
+    for t, eps_t in enumerate(eps_schedule, start=1):
+        remaining = max(1, int(m) - t + 1)
+        value = (2.0 * float(utility_sensitivity) / float(eps_t)) * (
+            math.log(remaining) + math.log(L_eff / float(beta))
+        )
+        alpha.append(float(value))
+    return {
+        "beta": float(beta),
+        "allocation": allocation,
+        "epsilon_schedule": [float(x) for x in eps_schedule],
+        "alpha_t": alpha,
+        "cumulative_regret_bound": float(sum(alpha)),
+        "exact_recovery_gap_sufficient": float(max(alpha)),
+        "statement": (
+            "With probability at least 1-beta, every round selects an atom within "
+            "alpha_t of the best remaining mass and total selected-support regret "
+            "is at most sum(alpha_t)."
+        ),
+    }
+
+
 def exponential_mechanism_topL_select(
     C: np.ndarray,
     L: int,
     epsilon: float,
     utility_sensitivity: float = 1.0,
     rng=None,
+    allocation: SelectionAllocation = "uniform",
+    beta_for_bound: float = 0.05,
 ) -> tuple[np.ndarray, dict]:
     """Admit ``L`` distinct atoms by sequential exponential-mechanism sampling.
     
@@ -281,7 +415,8 @@ def exponential_mechanism_topL_select(
     split uniformly across ``min(L, m)`` rounds, and sequential composition gives an
     ``(epsilon, 0)`` guarantee for the admitted index set.
     
-    This is the repository's transparent sequential admission procedure, not an
+    The selection budget is distributed according to ``allocation``. This is
+    the repository's transparent sequential admission procedure, not an
     optimized heavy-hitter algorithm.
     """
     _validate_privacy(epsilon)
@@ -302,6 +437,12 @@ def exponential_mechanism_topL_select(
             "admitted_atom_count": 0,
             "epsilon_selection": float(epsilon),
             "epsilon_per_round": 0.0,
+            "epsilon_schedule": [],
+            "selection_budget_allocation": allocation,
+            "utility_bound": sequential_em_utility_bound(
+                m=m, L=0, epsilon=epsilon, utility_sensitivity=utility_sensitivity,
+                beta=beta_for_bound, allocation=allocation
+            ),
             "rounds_requested": int(L),
             "rounds_effective": 0,
             "utility": "coordinate_mass",
@@ -311,11 +452,13 @@ def exponential_mechanism_topL_select(
 
     remaining = list(range(m))
     selected: list[int] = []
-    eps_round = float(epsilon) / float(L_eff)
+    eps_schedule = selection_epsilon_schedule(
+        L_eff, epsilon, m, allocation=allocation, beta=beta_for_bound
+    )
 
-    for _ in range(L_eff):
+    for eps_round in eps_schedule:
         scores = C[np.asarray(remaining, dtype=int)]
-        logits = eps_round * scores / (2.0 * float(utility_sensitivity))
+        logits = float(eps_round) * scores / (2.0 * float(utility_sensitivity))
         # Stable softmax.  The inputs have already been checked finite.
         logits = logits - np.max(logits)
         probs = np.exp(logits)
@@ -335,7 +478,17 @@ def exponential_mechanism_topL_select(
         "atom_admission": "sequential_exponential_mechanism_without_replacement",
         "admitted_atom_count": int(L_eff),
         "epsilon_selection": float(epsilon),
-        "epsilon_per_round": float(eps_round),
+        "epsilon_per_round": (
+            float(eps_schedule[0])
+            if allocation == "uniform" and eps_schedule.size
+            else None
+        ),
+        "epsilon_schedule": [float(x) for x in eps_schedule],
+        "selection_budget_allocation": allocation,
+        "utility_bound": sequential_em_utility_bound(
+            m=m, L=L_eff, epsilon=epsilon, utility_sensitivity=utility_sensitivity,
+            beta=beta_for_bound, allocation=allocation
+        ),
         "rounds_requested": int(L),
         "rounds_effective": int(L_eff),
         "utility": "coordinate_mass",
@@ -355,6 +508,8 @@ def sparse_private_topL_release(
     gaussian_calibration: GaussianCalibration = "analytic",
     contribution_bound: float = 1.0,
     support_mechanism: str = "sequential",
+    selection_budget_allocation: SelectionAllocation = "uniform",
+    selection_bound_beta: float = 0.05,
 ) -> tuple[np.ndarray, dict]:
     """Release a sparse semantic plan by private atom admission and noisy value release.
     
@@ -404,6 +559,8 @@ def sparse_private_topL_release(
         eps_sel,
         utility_sensitivity=sens["linf"],
         rng=rng,
+        allocation=selection_budget_allocation,
+        beta_for_bound=selection_bound_beta,
     )
 
     C_sparse = np.full(C.shape, -np.inf, dtype=float)
@@ -426,10 +583,11 @@ def sparse_private_topL_release(
         )
 
     C_sparse[selected] = noisy_vals
+    value_label = "Gaussian" if value_mechanism == "gaussian" else "Laplace"
     info = {
         "mechanism": "private_topL",
-        "mechanism_label": MECHANISM_LABELS["private_topL"],
-        "mechanism_display_name": MECHANISM_DISPLAY_NAMES["private_topL"],
+        "mechanism_label": rf"Exponential-mechanism Top-$L$ atoms + {value_label} values",
+        "mechanism_display_name": f"Exponential-mechanism Top-L atoms + {value_label} values",
         "release_mode": "em_top_L_atoms_then_noisy_selected_values",
         "plan_atom_admission": "Top-L atoms admitted by sequential exponential mechanism",
         "sparse_release": True,
