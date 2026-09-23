@@ -1,6 +1,6 @@
 # DP-SPIN
 
-**Reference implementation for _Differentially Private Semantic Plans for Aggregate Insight Generation_**
+**Reference implementation of _Differentially Private Semantic Plans for Aggregate Insight Generation_**
 
 DP-SPIN (differentially private semantic plans for insight narration) implements a trusted-curator framework for generating natural-language aggregate summaries of private text collections. Inside the curator, each protected contribution is mapped to a bounded sparse semantic vector over a finite public semantic atom universe. The contributions are aggregated into a semantic sketch, and the curator releases a differentially private semantic plan. A decoder verbalizes only the released plan, and a public verifier checks the decoder contract. The released aggregate summary is therefore post-processing of the differentially private plan.
 
@@ -342,10 +342,11 @@ Differential privacy bounds the influence of one protected unit. It does not pre
 
 ```bibtex
 @article{razeghi2026dpspin,
+  author  = {Behrooz Razeghi},
   title   = {Differentially Private Semantic Plans for Aggregate Insight Generation},
-  author  = {Razeghi, Behrooz},
-  journal = {arXiv preprint},
-  year    = {2026}
+  journal = {arXiv preprint arXiv:2609.16283},
+  year    = {2026},
+  url     = {https://arxiv.org/abs/2609.16283}
 }
 ```
 
