@@ -58,7 +58,6 @@ A decoder-visible atom label or description must be fixed independently of the p
 
 The public verifier is a contract verifier, not a semantic oracle or an independent privacy mechanism. It checks consistency with the released plan under fixed public rules. It does not compare the summary with the protected corpus, establish completeness, or certify that released noisy masses equal their non-private values.
 
-> **Evaluation artifacts are not deployment outputs.** Experimental runs retain non-private references and diagnostics for offline analysis. Do not expose these files as outputs of a private deployment. The deployment release interface should be limited to the differentially private semantic plan and outputs computed exclusively from that plan and public objects.
 
 ## Repository layout
 
